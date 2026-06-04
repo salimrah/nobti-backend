@@ -3,9 +3,9 @@ package ma.noba.user.infra.adapter;
 import ma.noba.provider.domain.port.service.ProviderProvisioningPort;
 import ma.noba.user.domain.model.Role;
 import ma.noba.user.domain.model.UserRole;
+import ma.noba.user.domain.port.RoleRepository;
 import ma.noba.user.domain.port.UserProfileRepository;
-import ma.noba.user.infra.JpaRoleRepository;
-import ma.noba.user.infra.JpaUserRoleRepository;
+import ma.noba.user.domain.port.UserRoleRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,13 +14,13 @@ import java.util.UUID;
 @Component
 public class ProviderProvisioningAdapter implements ProviderProvisioningPort {
 
-    private final JpaUserRoleRepository userRoleRepository;
+    private final UserRoleRepository userRoleRepository;
     private final UserProfileRepository userProfileRepository;
-    private final JpaRoleRepository roleRepository;
+    private final RoleRepository roleRepository;
 
-    public ProviderProvisioningAdapter(JpaUserRoleRepository userRoleRepository,
+    public ProviderProvisioningAdapter(UserRoleRepository userRoleRepository,
                                        UserProfileRepository userProfileRepository,
-                                       JpaRoleRepository roleRepository) {
+                                       RoleRepository roleRepository) {
         this.userRoleRepository = userRoleRepository;
         this.userProfileRepository = userProfileRepository;
         this.roleRepository = roleRepository;

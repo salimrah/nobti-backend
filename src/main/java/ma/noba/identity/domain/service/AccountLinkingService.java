@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-@org.springframework.stereotype.Service("v2AccountLinkingService")
+@org.springframework.stereotype.Service
 @RequiredArgsConstructor
 public class AccountLinkingService {
 

@@ -1,5 +1,6 @@
 package ma.noba.user.application.service;
 
+import lombok.extern.slf4j.Slf4j;
 import ma.noba.identity.domain.port.DeviceCommandPort;
 import ma.noba.shared.domain.event.AccountDeletionRequested;
 import ma.noba.shared.domain.event.EventBus;
@@ -33,6 +34,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class UserApplicationService {
 
     private final UserViewRepository userViewRepository;
@@ -60,13 +62,18 @@ public class UserApplicationService {
 
     @Transactional(readOnly = true)
     public UserResponse getUserById(UUID userId) {
+        log.debug("Fetching user by id: {}", userId);
         UserView user = userViewRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_NOT_FOUND, "User not found"));
+                .orElseThrow(() -> {
+                    log.warn("User not found: {}", userId);
+                    return new NotFoundException(ErrorCode.USER_NOT_FOUND, "User not found");
+                });
 
         var profile = userProfileRepository.findByUserId(userId).orElse(null);
         var roles = userRoleRepository.findByUserId(userId).stream()
                 .map(r -> r.getRole().getName())
                 .collect(Collectors.toSet());
+        log.debug("Returning user: {}", userId);
         return new UserResponse(
                 user.getId().toString(),
                 user.getPhone(),
@@ -81,8 +88,12 @@ public class UserApplicationService {
 
     @Transactional
     public UserResponse updateProfile(UUID userId, UpdateProfileRequest request) {
+        log.info("Updating profile for user: {}", userId);
         userViewRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_NOT_FOUND, "User not found"));
+                .orElseThrow(() -> {
+                    log.warn("User not found for profile update: {}", userId);
+                    return new NotFoundException(ErrorCode.USER_NOT_FOUND, "User not found");
+                });
 
         UserProfile profile = userProfileRepository.findByUserId(userId)
                 .orElseGet(() -> userProfileRepository.save(new UserProfile(userId, request.firstName(), request.lastName())));
@@ -103,24 +114,32 @@ public class UserApplicationService {
 
     @Transactional
     public void saveFcmToken(UUID userId, FcmTokenRequest request) {
+        log.info("Saving FCM token for user: {}", userId);
         deviceCommandPort.registerDevice(userId, request.fcmToken(), request.platform());
     }
 
     @Transactional
     public void deleteFcmToken(UUID userId, String fcmToken) {
+        log.info("Deleting FCM token for user: {}", userId);
         deviceCommandPort.unregisterDevice(userId, fcmToken);
     }
 
     @Transactional(readOnly = true)
     public boolean isProvider(UUID userId) {
-        return userRoleRepository.findByUserId(userId).stream()
+        boolean result = userRoleRepository.findByUserId(userId).stream()
                 .anyMatch(r -> "PROVIDER".equals(r.getRole().getName()) && r.isActive());
+        log.debug("isProvider check for user {}: {}", userId, result);
+        return result;
     }
 
     @Transactional
     public void completeOnboarding(UUID userId) {
+        log.info("Completing onboarding for user: {}", userId);
         UserView user = userViewRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_NOT_FOUND, "User not found"));
+                .orElseThrow(() -> {
+                    log.warn("User not found for onboarding: {}", userId);
+                    return new NotFoundException(ErrorCode.USER_NOT_FOUND, "User not found");
+                });
         user.setOnboardingStatus(OnboardingStatus.COMPLETED);
         userViewRepository.save(user);
         eventBus.publish(new UserOnboardingCompletedEvent(userId));
@@ -128,6 +147,7 @@ public class UserApplicationService {
 
     @Transactional(readOnly = true)
     public NotificationPreferenceResponse getNotificationPreferences(UUID userId) {
+        log.debug("Getting notification preferences for user: {}", userId);
         var pref = notificationPreferenceRepository.findByUserId(userId)
                 .orElse(new NotificationPreference(userId));
         return new NotificationPreferenceResponse(pref.isPushEnabled(), pref.isEmailEnabled(), pref.isSmsEnabled());
@@ -135,6 +155,7 @@ public class UserApplicationService {
 
     @Transactional
     public NotificationPreferenceResponse updateNotificationPreferences(UUID userId, UpdateNotificationPreferenceRequest request) {
+        log.info("Updating notification preferences for user: {}", userId);
         var pref = notificationPreferenceRepository.findByUserId(userId)
                 .orElseGet(() -> notificationPreferenceRepository.save(new NotificationPreference(userId)));
         if (request.pushEnabled() != null) pref.setPushEnabled(request.pushEnabled());
@@ -146,14 +167,20 @@ public class UserApplicationService {
 
     @Transactional
     public void deleteAccount(UUID userId) {
+        log.warn("Deleting account for user: {}", userId);
         userViewRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_NOT_FOUND, "User not found"));
+                .orElseThrow(() -> {
+                    log.warn("User not found for deletion: {}", userId);
+                    return new NotFoundException(ErrorCode.USER_NOT_FOUND, "User not found");
+                });
         eventBus.publish(new AccountDeletionRequested(userId));
         userProfileRepository.deleteByUserId(userId);
+        log.info("Account deleted for user: {}", userId);
     }
 
     @Transactional(readOnly = true)
     public PagedResponse<ServiceHistoryResponse> getServiceHistory(UUID userId, Pageable pageable) {
+        log.debug("Getting service history for user: {}", userId);
         var page = serviceHistoryRepository.findByUserIdOrderByCompletedAtDesc(userId, pageable)
                 .map(h -> new ServiceHistoryResponse(
                         h.getId().toString(),
@@ -171,8 +198,12 @@ public class UserApplicationService {
 
     @Transactional(readOnly = true)
     public UserDataExportResponse exportData(UUID userId) {
+        log.info("Exporting data for user: {}", userId);
         UserView user = userViewRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.USER_NOT_FOUND, "User not found"));
+                .orElseThrow(() -> {
+                    log.warn("User not found for data export: {}", userId);
+                    return new NotFoundException(ErrorCode.USER_NOT_FOUND, "User not found");
+                });
         var profile = userProfileRepository.findByUserId(userId).orElse(null);
         var roles = userRoleRepository.findByUserId(userId).stream()
                 .map(r -> r.getRole().getName())

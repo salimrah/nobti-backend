@@ -6,9 +6,8 @@ import com.stripe.param.*;
 import lombok.extern.slf4j.Slf4j;
 import ma.noba.payment.domain.model.PaymentTransaction;
 import ma.noba.payment.domain.port.StripePaymentPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
-import ma.noba.config.StripeConfig;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -17,7 +16,7 @@ import java.util.UUID;
 
 @Slf4j
 @Component
-@ConditionalOnBean(StripeConfig.class)
+@ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText('${app.stripe.secret-key:}')")
 public class StripePaymentAdapter implements StripePaymentPort {
 
     @Override

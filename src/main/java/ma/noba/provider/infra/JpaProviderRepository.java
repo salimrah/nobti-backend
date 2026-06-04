@@ -1,6 +1,7 @@
 package ma.noba.provider.infra;
 
 import ma.noba.provider.domain.model.Provider;
+import ma.noba.provider.domain.model.ProviderStatus;
 import ma.noba.provider.domain.port.service.ProviderDistanceProjection;
 import ma.noba.provider.domain.port.service.ProviderRepository;
 import org.springframework.data.domain.Page;
@@ -37,7 +38,20 @@ public interface JpaProviderRepository extends JpaRepository<Provider, UUID>, Pr
     Page<Provider> findByActiveOnlyPage(Pageable pageable);
 
     @Query("SELECT p FROM Provider p WHERE p.status = :status ORDER BY p.createdAt DESC")
-    List<Provider> findByStatus(@Param("status") String status);
+    List<Provider> findByStatusString(@Param("status") String status);
+
+    @Query("SELECT COUNT(p) FROM Provider p WHERE p.status = :status")
+    long countByStatusString(@Param("status") String status);
+
+    @Override
+    default List<Provider> findByStatus(ProviderStatus status) {
+        return findByStatusString(status.name());
+    }
+
+    @Override
+    default long countByStatus(ProviderStatus status) {
+        return countByStatusString(status.name());
+    }
 
     default Optional<Provider> findFirstByUserId(UUID userId) {
         List<Provider> providers = findByUserIdIgnoreStatus(userId);

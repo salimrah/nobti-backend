@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import ma.noba.identity.application.OtpVerifyRequest;
 import ma.noba.identity.domain.event.UserAuthenticatedEvent;
 import ma.noba.identity.domain.model.AuthMethod;
-import ma.noba.identity.domain.model.AuthToken;
+import ma.noba.identity.application.AuthToken;
 import ma.noba.identity.domain.model.User;
 import ma.noba.shared.DomainService;
 import ma.noba.shared.domain.event.EventBus;

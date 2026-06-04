@@ -6,8 +6,8 @@ import ma.noba.provider.domain.event.ProviderStatusChangedEvent;
 import ma.noba.provider.domain.event.ProviderUpdatedEvent;
 import ma.noba.provider.domain.model.Provider;
 import ma.noba.provider.domain.model.ProviderSearchView;
+import ma.noba.provider.domain.port.service.ProviderRatingRepository;
 import ma.noba.provider.domain.port.service.ProviderRepository;
-import ma.noba.provider.infra.JpaProviderRatingRepository;
 import ma.noba.provider.infra.ProviderSearchViewRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,12 +24,12 @@ public class ProviderSearchViewSyncListener {
     private static final Logger log = LoggerFactory.getLogger(ProviderSearchViewSyncListener.class);
 
     private final ProviderSearchViewRepository searchViewRepository;
-    private final JpaProviderRatingRepository ratingRepository;
+    private final ProviderRatingRepository ratingRepository;
     private final ProviderRepository providerRepository;
 
     public ProviderSearchViewSyncListener(
             ProviderSearchViewRepository searchViewRepository,
-            JpaProviderRatingRepository ratingRepository,
+            ProviderRatingRepository ratingRepository,
             ProviderRepository providerRepository) {
         this.searchViewRepository = searchViewRepository;
         this.ratingRepository = ratingRepository;
@@ -69,7 +69,7 @@ public class ProviderSearchViewSyncListener {
     public void onRatingChanged(ProviderRatedEvent event) {
         searchViewRepository.findById(event.providerId()).ifPresent(view -> {
             double avg = ratingRepository.getAverageRating(event.providerId());
-            long count = ratingRepository.findByProviderId(event.providerId()).size();
+            long count = ratingRepository.countByProviderId(event.providerId());
             view.setRatingAverage(avg);
             view.setRatingCount((int) count);
             view.setUpdatedAt(Instant.now());
@@ -88,7 +88,7 @@ public class ProviderSearchViewSyncListener {
         view.setUpdatedAt(Instant.now());
 
         double avg = ratingRepository.getAverageRating(provider.getId());
-        long count = ratingRepository.findByProviderId(provider.getId()).size();
+        long count = ratingRepository.countByProviderId(provider.getId());
         view.setRatingAverage(avg);
         view.setRatingCount((int) count);
 

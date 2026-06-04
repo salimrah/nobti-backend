@@ -1,6 +1,7 @@
 package ma.noba.identity.domain.service;
 
 import lombok.RequiredArgsConstructor;
+import ma.noba.identity.application.AuthToken;
 import ma.noba.identity.domain.model.*;
 import ma.noba.identity.application.SocialAuthRequest;
 import ma.noba.identity.domain.port.UserProfileProvisioningPort;

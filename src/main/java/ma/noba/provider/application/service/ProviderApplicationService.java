@@ -1,10 +1,15 @@
 package ma.noba.provider.application.service;
 
-import ma.noba.provider.application.dto.*;
+import lombok.extern.slf4j.Slf4j;
+import ma.noba.provider.application.dto.AccessibilityRequest;
+import ma.noba.provider.application.dto.AddServiceRequest;
+import ma.noba.provider.application.dto.CreateProviderRequest;
+import ma.noba.provider.application.dto.ProviderResponse;
+import ma.noba.provider.application.dto.ProviderServiceResponse;
+import ma.noba.provider.application.dto.ServiceCategoryResponse;
 import ma.noba.provider.domain.model.Provider;
 import ma.noba.provider.domain.model.ProviderFavorite;
 import ma.noba.provider.domain.model.ProviderRating;
-import ma.noba.provider.domain.model.ServiceCategory;
 import ma.noba.provider.domain.port.service.ProviderFavoriteRepository;
 import ma.noba.provider.domain.port.service.ProviderProvisioningPort;
 import ma.noba.provider.domain.port.service.ProviderRatingRepository;
@@ -34,8 +39,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class ProviderApplicationService {
 
     private final ProviderRepository providerRepository;
@@ -66,6 +73,7 @@ public class ProviderApplicationService {
     @Transactional
     @CacheEvict(value = "providers", allEntries = true)
     public ProviderResponse createProvider(UUID userId, CreateProviderRequest request) {
+        log.info("Creating provider for user: {}", userId);
         if (providerRepository.findByUserId(userId).isPresent()) {
             throw new BusinessException(ErrorCode.PROVIDER_ALREADY_EXISTS, "User already has a provider profile");
         }
@@ -78,29 +86,42 @@ public class ProviderApplicationService {
         subscriptionRepository.save(new ProviderSubscription(saved.getId(), SubscriptionTier.FREE));
         provisioningPort.onProviderCreated(saved.getUserId(), request.firstName(), request.lastName());
         eventBus.publish(new ProviderCreatedEvent(saved.getId(), saved.getUserId()));
+        log.info("Provider created: {} for user: {}", saved.getId(), userId);
         return toResponse(saved);
     }
 
     @Transactional(readOnly = true)
     @Cacheable(value = "providerDetails", key = "#providerId")
     public ProviderResponse getProvider(UUID providerId) {
+        log.debug("Fetching provider: {}", providerId);
         Provider provider = providerRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found"));
+                .orElseThrow(() -> {
+                    log.warn("Provider not found: {}", providerId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found");
+                });
         return toResponse(provider);
     }
 
     @Transactional(readOnly = true)
     public ProviderResponse getMyProvider(UUID userId) {
+        log.debug("Fetching provider for user: {}", userId);
         Provider provider = providerRepository.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found"));
+                .orElseThrow(() -> {
+                    log.warn("No provider profile found for user: {}", userId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found");
+                });
         return toResponse(provider);
     }
 
     @Transactional
     @CacheEvict(value = "providerDetails", key = "#result.id()")
     public ProviderResponse updateProvider(UUID userId, CreateProviderRequest request) {
+        log.info("Updating provider for user: {}", userId);
         Provider provider = providerRepository.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found"));
+                .orElseThrow(() -> {
+                    log.warn("No provider profile found for update by user: {}", userId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found");
+                });
 
         provider.updateInfo(request.name(), request.description(), null, request.address(), request.category());
         if (request.latitude() != null && request.longitude() != null) {
@@ -109,14 +130,19 @@ public class ProviderApplicationService {
 
         Provider saved = providerRepository.save(provider);
         eventBus.publish(new ProviderUpdatedEvent(saved.getId()));
+        log.info("Provider updated: {} for user: {}", saved.getId(), userId);
         return toResponse(saved);
     }
 
     @Transactional
     @CacheEvict(value = "providerDetails", allEntries = true)
     public ProviderServiceResponse addService(UUID userId, AddServiceRequest request) {
+        log.info("Adding service for user: {}", userId);
         Provider provider = providerRepository.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found"));
+                .orElseThrow(() -> {
+                    log.warn("No provider profile found for adding service by user: {}", userId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found");
+                });
 
         ProviderSubscription subscription = subscriptionRepository.findByProviderId(provider.getId())
                 .orElse(null);
@@ -149,8 +175,12 @@ public class ProviderApplicationService {
     @Transactional(readOnly = true)
     @Cacheable(value = "services", key = "#providerId")
     public List<ProviderServiceResponse> getServices(UUID providerId) {
+        log.debug("Fetching services for provider: {}", providerId);
         Provider provider = providerRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found"));
+                .orElseThrow(() -> {
+                    log.warn("Provider not found for services: {}", providerId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found");
+                });
         return provider.getActiveServices().stream()
                 .map(s -> new ProviderServiceResponse(s.getId(), s.getName(), s.getDuration(), s.getPrice(), s.getCategory(), s.isActive()))
                 .toList();
@@ -159,16 +189,22 @@ public class ProviderApplicationService {
     @Transactional
     @CacheEvict(value = "providerDetails", allEntries = true)
     public void removeService(UUID userId, UUID serviceId) {
+        log.info("Removing service {} for user: {}", serviceId, userId);
         Provider provider = providerRepository.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found"));
+                .orElseThrow(() -> {
+                    log.warn("No provider profile found for removing service by user: {}", userId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found");
+                });
 
         provider.removeService(serviceId);
         Provider saved = providerRepository.save(provider);
         eventBus.publish(new ProviderUpdatedEvent(saved.getId()));
+        log.info("Service {} removed from provider {}", serviceId, saved.getId());
     }
 
     @Transactional(readOnly = true)
     public List<ProviderResponse> searchByCategory(String category) {
+        log.debug("Searching providers by category: {}", category);
         return providerRepository.findByCategory(category).stream()
                 .map(this::toResponse)
                 .toList();
@@ -191,26 +227,40 @@ public class ProviderApplicationService {
         return toPagedResponse(providerRepository.findAllActive(pageable));
     }
 
-
     @Transactional(readOnly = true)
     public List<ProviderResponse> getCustomerFavorites(UUID customerId) {
-        return favoriteRepository.findByCustomerId(customerId).stream()
-                .map(fav -> providerRepository.findById(fav.getProviderId()).orElse(null))
+        List<ProviderFavorite> favorites = favoriteRepository.findByCustomerId(customerId);
+        if (favorites.isEmpty()) return List.of();
+        List<UUID> providerIds = favorites.stream()
+                .map(ProviderFavorite::getProviderId)
+                .toList();
+        Map<UUID, Provider> providerMap = providerRepository.findAllById(providerIds).stream()
+                .collect(Collectors.toMap(Provider::getId, p -> p));
+        Map<UUID, Double> avgRatings = ratingRepository.getAverageRatings(providerIds);
+        Map<UUID, Integer> ratingCounts = ratingRepository.countRatingsByProviderIds(providerIds);
+        return favorites.stream()
+                .map(fav -> providerMap.get(fav.getProviderId()))
                 .filter(java.util.Objects::nonNull)
-                .map(this::toResponse)
+                .map(p -> toResponse(p, avgRatings, ratingCounts))
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<ServiceCategory> getAllCategories() {
-        return serviceCategoryRepository.findAll();
+    public List<ServiceCategoryResponse> getAllCategories() {
+        return serviceCategoryRepository.findAll().stream()
+                .map(c -> new ServiceCategoryResponse(c.getId(), c.getName(), c.getDefaultDuration(), c.getDescription()))
+                .toList();
     }
 
     @Transactional
     @CacheEvict(value = "ratings", key = "#providerId")
     public void rateProvider(UUID customerId, UUID providerId, int value, String comment) {
+        log.info("Rating provider {} by customer {}: {} stars", providerId, customerId, value);
         Provider provider = providerRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found"));
+                .orElseThrow(() -> {
+                    log.warn("Provider not found for rating: {}", providerId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found");
+                });
 
         if (provider.getUserId().equals(customerId)) {
             throw new IllegalArgumentException("You cannot rate your own provider profile");
@@ -223,18 +273,24 @@ public class ProviderApplicationService {
             ratingRepository.save(new ProviderRating(providerId, customerId, value, comment));
         }
         eventBus.publish(new ProviderRatedEvent(providerId, customerId, value));
+        log.info("Rating saved for provider {} by customer {}", providerId, customerId);
     }
 
     @Transactional(readOnly = true)
     @Cacheable(value = "ratings", key = "#providerId")
     public double getAverageRating(UUID providerId) {
+        log.debug("Getting average rating for provider: {}", providerId);
         return ratingRepository.getAverageRating(providerId);
     }
 
     @Transactional
     public void toggleFavorite(UUID customerId, UUID providerId, boolean favorite) {
+        log.info("Toggling favorite for provider {} by customer {}: {}", providerId, customerId, favorite);
         providerRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found"));
+                .orElseThrow(() -> {
+                    log.warn("Provider not found for favorite toggle: {}", providerId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found");
+                });
 
         var existing = favoriteRepository.findByProviderIdAndCustomerId(providerId, customerId);
         if (favorite && existing.isEmpty()) {
@@ -242,18 +298,24 @@ public class ProviderApplicationService {
         } else if (!favorite && existing.isPresent()) {
             favoriteRepository.deleteByProviderIdAndCustomerId(providerId, customerId);
         }
+        log.debug("Favorite toggled for provider {} by customer {}: {}", providerId, customerId, favorite);
     }
 
     @Transactional(readOnly = true)
     public boolean isFavorite(UUID customerId, UUID providerId) {
+        log.debug("Checking favorite for provider {} by customer {}", providerId, customerId);
         return favoriteRepository.findByProviderIdAndCustomerId(providerId, customerId).isPresent();
     }
 
     @Transactional
     @CacheEvict(value = "providerDetails", key = "#providerId")
     public void togglePriorityQueue(UUID userId, boolean enabled) {
+        log.info("Toggling priority queue for user {}: {}", userId, enabled);
         Provider provider = providerRepository.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found"));
+                .orElseThrow(() -> {
+                    log.warn("No provider profile found for priority toggle by user: {}", userId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found");
+                });
         provider.setPriorityQueueEnabled(enabled);
         providerRepository.save(provider);
         eventBus.publish(new ProviderUpdatedEvent(provider.getId()));
@@ -262,8 +324,12 @@ public class ProviderApplicationService {
     @Transactional
     @CacheEvict(value = "providerDetails", allEntries = true)
     public ProviderResponse updateAccessibility(UUID userId, AccessibilityRequest request) {
+        log.info("Updating accessibility for user: {}", userId);
         Provider provider = providerRepository.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found"));
+                .orElseThrow(() -> {
+                    log.warn("No provider profile found for accessibility update by user: {}", userId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found");
+                });
         provider.setWheelchairAccessible(request.wheelchairAccessible());
         provider.setSignLanguage(request.signLanguage());
         provider.setSensoryFriendly(request.sensoryFriendly());
@@ -275,30 +341,40 @@ public class ProviderApplicationService {
 
     @Transactional
     public void approveProvider(UUID providerId) {
+        log.info("Approving provider: {}", providerId);
         Provider provider = providerRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found"));
+                .orElseThrow(() -> {
+                    log.warn("Provider not found for approval: {}", providerId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found");
+                });
         ProviderStatus oldStatus = provider.getStatus();
         provider.setStatus(ProviderStatus.ACTIVE);
         provider.setVerified(true);
         provider.setVerificationDate(Instant.now());
         providerRepository.save(provider);
         eventBus.publish(new ProviderStatusChangedEvent(providerId, provider.getUserId(), oldStatus, ProviderStatus.ACTIVE));
+        log.info("Provider approved: {}", providerId);
     }
 
     @Transactional
     public void rejectProvider(UUID providerId) {
+        log.info("Rejecting provider: {}", providerId);
         Provider provider = providerRepository.findById(providerId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found"));
+                .orElseThrow(() -> {
+                    log.warn("Provider not found for rejection: {}", providerId);
+                    return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found");
+                });
         ProviderStatus oldStatus = provider.getStatus();
         provider.setStatus(ProviderStatus.REJECTED);
         providerRepository.save(provider);
         eventBus.publish(new ProviderStatusChangedEvent(providerId, provider.getUserId(), oldStatus, ProviderStatus.REJECTED));
+        log.info("Provider rejected: {}", providerId);
     }
 
     @Transactional(readOnly = true)
     public List<ProviderResponse> getPendingProviders() {
-        return providerRepository.findAll().stream()
-                .filter(p -> p.getStatus() == ProviderStatus.PENDING)
+        log.debug("Fetching pending providers");
+        return providerRepository.findByStatus(ProviderStatus.PENDING).stream()
                 .map(this::toResponse)
                 .toList();
     }
@@ -329,7 +405,7 @@ public class ProviderApplicationService {
                 provider.isSensoryFriendly(),
                 tier,
                 avgRatings.getOrDefault(provider.getId(), ratingRepository.getAverageRating(provider.getId())),
-                ratingCounts.getOrDefault(provider.getId(), ratingRepository.findByProviderId(provider.getId()).size())
+                ratingCounts.getOrDefault(provider.getId(), (int) ratingRepository.countByProviderId(provider.getId()))
         );
     }
 

@@ -18,6 +18,8 @@ public interface JpaProviderRatingRepository extends JpaRepository<ProviderRatin
 
     List<ProviderRating> findByProviderId(UUID providerId);
 
+    long countByProviderId(UUID providerId);
+
     @Query("SELECT AVG(r.value) FROM ProviderRating r WHERE r.providerId = :providerId")
     Optional<Double> avgByProviderId(UUID providerId);
 

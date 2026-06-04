@@ -14,6 +14,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.util.Optional;
+
 @Component
 public class ProviderNotificationListener {
 
@@ -23,9 +25,9 @@ public class ProviderNotificationListener {
     private final FcmTokenQueryPort fcmTokenQueryPort;
 
     public ProviderNotificationListener(
-            FirebaseMessaging firebaseMessaging,
+            Optional<FirebaseMessaging> firebaseMessaging,
             FcmTokenQueryPort fcmTokenQueryPort) {
-        this.firebaseMessaging = firebaseMessaging;
+        this.firebaseMessaging = firebaseMessaging.orElse(null);
         this.fcmTokenQueryPort = fcmTokenQueryPort;
     }
 

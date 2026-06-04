@@ -22,9 +22,7 @@ public class AdminProviderPortAdapter implements AdminProviderPort {
 
     @Override
     public long countPendingProviders() {
-        return providerRepository.findAll().stream()
-                .filter(p -> p.getStatus() == ProviderStatus.PENDING)
-                .count();
+        return providerRepository.countByStatus(ProviderStatus.PENDING);
     }
 
     @Override

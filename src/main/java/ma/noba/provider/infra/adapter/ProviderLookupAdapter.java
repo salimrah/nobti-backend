@@ -2,7 +2,7 @@ package ma.noba.provider.infra.adapter;
 
 import lombok.RequiredArgsConstructor;
 import ma.noba.payment.domain.port.ProviderLookupPort;
-import ma.noba.provider.infra.JpaProviderRepository;
+import ma.noba.provider.domain.port.service.ProviderRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -12,11 +12,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ProviderLookupAdapter implements ProviderLookupPort {
 
-    private final JpaProviderRepository jpaProviderRepository;
+    private final ProviderRepository providerRepository;
 
     @Override
     public Optional<UUID> findProviderIdByUserId(UUID userId) {
-        return jpaProviderRepository.findByUserId(userId)
+        return providerRepository.findByUserId(userId)
             .map(provider -> provider.getId());
     }
 }

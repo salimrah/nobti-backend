@@ -7,9 +7,9 @@ import ma.noba.provider.application.dto.CreateProviderRequest;
 import ma.noba.provider.application.dto.DayHours;
 import ma.noba.provider.application.dto.ProviderResponse;
 import ma.noba.provider.application.dto.ProviderServiceResponse;
+import ma.noba.provider.application.dto.ServiceCategoryResponse;
 import ma.noba.provider.application.service.BusinessHoursService;
 import ma.noba.provider.application.service.ProviderApplicationService;
-import ma.noba.provider.domain.model.ServiceCategory;
 import ma.noba.shared.domain.user.UserPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -90,7 +90,7 @@ public class ProviderProfileController {
     }
 
     @GetMapping("/categories")
-    public ResponseEntity<List<ServiceCategory>> getCategories() {
+    public ResponseEntity<List<ServiceCategoryResponse>> getCategories() {
         return ResponseEntity.ok(providerService.getAllCategories());
     }
 

@@ -3,7 +3,7 @@ package ma.noba.payment.infra;
 import lombok.extern.slf4j.Slf4j;
 import ma.noba.payment.domain.model.PaymentTransaction;
 import ma.noba.payment.domain.port.StripePaymentPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -11,7 +11,7 @@ import java.util.UUID;
 
 @Slf4j
 @Component
-@ConditionalOnMissingBean(StripePaymentPort.class)
+@ConditionalOnExpression("!T(org.springframework.util.StringUtils).hasText('${app.stripe.secret-key:}')")
 public class LogStripePaymentAdapter implements StripePaymentPort {
 
     @Override

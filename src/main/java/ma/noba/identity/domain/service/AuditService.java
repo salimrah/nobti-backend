@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import ma.noba.identity.domain.model.SecurityLog;
 import ma.noba.identity.domain.repository.SecurityLogRepository;
 import ma.noba.shared.DomainService;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -12,6 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @DomainService
+@Transactional
 public class AuditService {
     private final SecurityLogRepository repo;
     private static final ObjectMapper mapper = new ObjectMapper();

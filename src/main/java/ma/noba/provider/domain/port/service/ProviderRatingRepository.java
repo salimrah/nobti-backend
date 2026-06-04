@@ -15,6 +15,8 @@ public interface ProviderRatingRepository {
 
     List<ProviderRating> findByProviderId(UUID providerId);
 
+    long countByProviderId(UUID providerId);
+
     double getAverageRating(UUID providerId);
 
     Map<UUID, Double> getAverageRatings(List<UUID> providerIds);

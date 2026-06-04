@@ -15,7 +15,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Locale;
 
-@org.springframework.stereotype.Service("v2PasswordResetService")
+@org.springframework.stereotype.Service
 @RequiredArgsConstructor
 public class PasswordResetService {
 

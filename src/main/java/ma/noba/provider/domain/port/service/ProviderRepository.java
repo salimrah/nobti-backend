@@ -1,6 +1,7 @@
 package ma.noba.provider.domain.port.service;
 
 import ma.noba.provider.domain.model.Provider;
+import ma.noba.provider.domain.model.ProviderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -31,4 +32,8 @@ public interface ProviderRepository {
     Page<ProviderDistanceProjection> findNearbyIdsWithPostGis(double lat, double lon, double radiusKm, Pageable pageable);
 
     List<Provider> findAll();
+
+    List<Provider> findByStatus(ProviderStatus status);
+
+    long countByStatus(ProviderStatus status);
 }

@@ -3,8 +3,8 @@ package ma.noba.user.infra.adapter;
 import ma.noba.identity.domain.service.UserRolePort;
 import ma.noba.user.domain.model.Role;
 import ma.noba.user.domain.model.UserRole;
-import ma.noba.user.infra.JpaRoleRepository;
-import ma.noba.user.infra.JpaUserRoleRepository;
+import ma.noba.user.domain.port.RoleRepository;
+import ma.noba.user.domain.port.UserRoleRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,10 +15,10 @@ import java.util.stream.Collectors;
 @Component
 public class UserRolePortAdapter implements UserRolePort {
 
-    private final JpaUserRoleRepository userRoleRepository;
-    private final JpaRoleRepository roleRepository;
+    private final UserRoleRepository userRoleRepository;
+    private final RoleRepository roleRepository;
 
-    public UserRolePortAdapter(JpaUserRoleRepository userRoleRepository, JpaRoleRepository roleRepository) {
+    public UserRolePortAdapter(UserRoleRepository userRoleRepository, RoleRepository roleRepository) {
         this.userRoleRepository = userRoleRepository;
         this.roleRepository = roleRepository;
     }

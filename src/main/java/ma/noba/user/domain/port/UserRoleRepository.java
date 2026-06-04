@@ -7,7 +7,11 @@ import java.util.UUID;
 
 public interface UserRoleRepository {
 
+    UserRole save(UserRole userRole);
+
     List<UserRole> findByUserId(UUID userId);
 
     List<UserRole> findByRoleName(String roleName);
+
+    long countByRoleName(String roleName);
 }

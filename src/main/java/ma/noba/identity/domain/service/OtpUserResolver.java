@@ -5,6 +5,7 @@ import ma.noba.identity.domain.model.OtpChannel;
 import ma.noba.identity.domain.model.User;
 import ma.noba.identity.domain.repository.UserRepository;
 import ma.noba.shared.DomainService;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
 
@@ -16,6 +17,7 @@ public class OtpUserResolver {
     private final UserFactory userFactory;
     private final HashService hashService;
 
+    @Transactional
     public User resolve(OtpChannel channel, String target) {
         return switch (channel) {
             case EMAIL -> resolveEmail(target);

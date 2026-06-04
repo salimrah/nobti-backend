@@ -5,7 +5,7 @@ import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import lombok.RequiredArgsConstructor;
-import ma.noba.identity.domain.model.AuthToken;
+import ma.noba.identity.application.AuthToken;
 import ma.noba.identity.domain.model.RefreshToken;
 import ma.noba.identity.domain.model.User;
 import ma.noba.shared.domain.model.OnboardingStatus;

@@ -2,7 +2,7 @@ package ma.noba.identity.domain.service;
 
 import lombok.RequiredArgsConstructor;
 import ma.noba.identity.domain.model.AuthMethod;
-import ma.noba.identity.domain.model.AuthToken;
+import ma.noba.identity.application.AuthToken;
 import ma.noba.shared.DomainService;
 
 import java.util.List;

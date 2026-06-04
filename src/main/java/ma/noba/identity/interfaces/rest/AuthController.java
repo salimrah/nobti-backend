@@ -4,7 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import ma.noba.identity.application.*;
 import ma.noba.identity.domain.exception.TooManyRequestsException;
-import ma.noba.identity.domain.model.AuthToken;
+import ma.noba.identity.application.AuthToken;
 import ma.noba.identity.domain.service.*;
 import ma.noba.identity.infrastructure.JwtLogoutHandler;
 import ma.noba.identity.domain.model.AuthMethod;

@@ -15,6 +15,6 @@ public class AdminUserPortAdapter implements AdminUserPort {
 
     @Override
     public long countProviders() {
-        return userRoleRepository.findByRoleName("PROVIDER").size();
+        return userRoleRepository.countByRoleName("PROVIDER");
     }
 }

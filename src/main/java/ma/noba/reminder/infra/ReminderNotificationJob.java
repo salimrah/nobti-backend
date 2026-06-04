@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 @Component
 @ConditionalOnProperty(name = "reminder.notification.enabled", havingValue = "true", matchIfMissing = true)
@@ -29,10 +30,10 @@ public class ReminderNotificationJob {
 
     public ReminderNotificationJob(ServiceReminderRepository reminderRepository,
                                    FcmTokenQueryPort fcmTokenQueryPort,
-                                   FirebaseMessaging firebaseMessaging) {
+                                   Optional<FirebaseMessaging> firebaseMessaging) {
         this.reminderRepository = reminderRepository;
         this.fcmTokenQueryPort = fcmTokenQueryPort;
-        this.firebaseMessaging = firebaseMessaging;
+        this.firebaseMessaging = firebaseMessaging.orElse(null);
     }
 
     @Transactional
@@ -56,6 +57,13 @@ public class ReminderNotificationJob {
     }
 
     private void sendNotification(ServiceReminder reminder) {
+        if (firebaseMessaging == null) {
+            log.info("[MOCK] Service reminder for user {}: {}", reminder.getUserId(), reminder.getServiceName());
+            reminder.snooze();
+            reminderRepository.save(reminder);
+            return;
+        }
+
         String token = fcmTokenQueryPort.findFcmTokenByUserId(reminder.getUserId()).orElse(null);
         if (token == null) {
             log.warn("No FCM token for user {}, marking reminder inactive", reminder.getUserId());

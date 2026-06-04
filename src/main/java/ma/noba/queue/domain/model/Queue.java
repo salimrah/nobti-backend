@@ -2,6 +2,7 @@ package ma.noba.queue.domain.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -14,7 +15,6 @@ import java.util.*;
 @Entity
 @Table(name = "queue")
 @Getter
-@Setter
 @NoArgsConstructor
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class Queue {
@@ -22,23 +22,27 @@ public class Queue {
     @Id
     @GeneratedValue
     @EqualsAndHashCode.Include
+    @Setter
     private UUID id;
 
     @Column(nullable = false)
     private UUID providerId;
 
     @Enumerated(EnumType.STRING)
+    @Setter
     @Column(nullable = false, length = 20)
     private QueueStatus status;
 
     @OneToMany(mappedBy = "queue", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")
     @JsonIgnore
+    @Setter(AccessLevel.NONE)
     private List<QueueMember> members = new ArrayList<>();
 
     @Column(nullable = false)
     private Instant createdAt;
 
+    @Setter
     @Column(nullable = false)
     private Instant updatedAt;
 

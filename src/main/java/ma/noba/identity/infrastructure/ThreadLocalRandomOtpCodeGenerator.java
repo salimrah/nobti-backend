@@ -14,8 +14,9 @@ public class ThreadLocalRandomOtpCodeGenerator implements OtpCodeGenerator<Strin
     @Override
     public String generate(int digits) {
         if (digits <= 0) throw new IllegalArgumentException("Digits must be positive");
-        return String.format("%0" + CODE_LENGTH + "d",
-                ThreadLocalRandom.current().nextInt(MAX_OTP_VALUE + 1));
+        int maxValue = (int) Math.pow(10, digits) - 1;
+        return String.format("%0" + digits + "d",
+                ThreadLocalRandom.current().nextInt(maxValue + 1));
     }
 
     @Override

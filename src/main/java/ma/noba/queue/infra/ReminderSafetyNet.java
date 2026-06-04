@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -38,6 +39,7 @@ public class ReminderSafetyNet {
         this.distributedLock = distributedLock;
     }
 
+    @Transactional
     @Scheduled(fixedRateString = "${queue.notification.poll-interval-ms:60000}")
     public void checkPendingReminders() {
         if (!distributedLock.tryLock("reminder-safety-net", LOCK_TTL)) {

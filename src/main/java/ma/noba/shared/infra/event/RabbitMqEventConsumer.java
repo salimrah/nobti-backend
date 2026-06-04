@@ -2,12 +2,24 @@ package ma.noba.shared.infra.event;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ma.noba.identity.domain.event.OtpFailedEvent;
+import ma.noba.identity.domain.event.OtpInitiatedEvent;
+import ma.noba.identity.domain.event.OtpVerifiedEvent;
 import ma.noba.identity.domain.event.UserAuthenticatedEvent;
-import ma.noba.shared.domain.event.UserSignedUpEvent;
+import ma.noba.provider.domain.event.ProviderCreatedEvent;
+import ma.noba.provider.domain.event.ProviderRatedEvent;
+import ma.noba.provider.domain.event.ProviderStatusChangedEvent;
+import ma.noba.provider.domain.event.ProviderUpdatedEvent;
+import ma.noba.qa.domain.event.QuestionAskedEvent;
 import ma.noba.queue.domain.event.ClientJoinedQueueEvent;
 import ma.noba.queue.domain.event.ClientLeftQueueEvent;
+import ma.noba.queue.domain.event.ClientServiceCompletedEvent;
 import ma.noba.queue.domain.event.ClientTurnStartedEvent;
+import ma.noba.shared.domain.event.AccountDeletionRequested;
 import ma.noba.shared.domain.event.DomainEvent;
+import ma.noba.shared.domain.event.UserOnboardingCompletedEvent;
+import ma.noba.shared.domain.event.UserSignedUpEvent;
+import ma.noba.shared.domain.event.UserStatusChangedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -24,12 +36,24 @@ public class RabbitMqEventConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(RabbitMqEventConsumer.class);
 
-    private static final Map<String, Class<? extends DomainEvent>> EVENT_TYPE_MAP = Map.of(
-            "user.signed_up", UserSignedUpEvent.class,
-            "user.authenticated", UserAuthenticatedEvent.class,
-            "queue.client.joined", ClientJoinedQueueEvent.class,
-            "queue.client.left", ClientLeftQueueEvent.class,
-            "queue.client.turn.started", ClientTurnStartedEvent.class
+    private static final Map<String, Class<? extends DomainEvent>> EVENT_TYPE_MAP = Map.ofEntries(
+            Map.entry("user.signed_up", UserSignedUpEvent.class),
+            Map.entry("user.authenticated", UserAuthenticatedEvent.class),
+            Map.entry("user.onboarding_completed", UserOnboardingCompletedEvent.class),
+            Map.entry("user.status_changed", UserStatusChangedEvent.class),
+            Map.entry("account.deletion_requested", AccountDeletionRequested.class),
+            Map.entry("otp.initiated", OtpInitiatedEvent.class),
+            Map.entry("otp.verified", OtpVerifiedEvent.class),
+            Map.entry("otp.failed", OtpFailedEvent.class),
+            Map.entry("queue.client.joined", ClientJoinedQueueEvent.class),
+            Map.entry("queue.client.left", ClientLeftQueueEvent.class),
+            Map.entry("queue.client.turn.started", ClientTurnStartedEvent.class),
+            Map.entry("queue.client.service.completed", ClientServiceCompletedEvent.class),
+            Map.entry("provider.created", ProviderCreatedEvent.class),
+            Map.entry("provider.updated", ProviderUpdatedEvent.class),
+            Map.entry("provider.rated", ProviderRatedEvent.class),
+            Map.entry("provider.status_changed", ProviderStatusChangedEvent.class),
+            Map.entry("qa.question.asked", QuestionAskedEvent.class)
     );
 
     private final ObjectMapper objectMapper;

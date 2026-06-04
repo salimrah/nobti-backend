@@ -1,7 +1,7 @@
 package ma.noba.identity;
 
 import ma.noba.shared.AbstractIntegrationTest;
-import ma.noba.identity.domain.model.AuthToken;
+import ma.noba.identity.application.AuthToken;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
