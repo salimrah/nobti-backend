@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+COMPOSE_FILE="docker-compose.dev.yml"
+
+if [ ! -f "$COMPOSE_FILE" ]; then
+  echo "Error: $COMPOSE_FILE not found in $(pwd)"
+  exit 1
+fi
+
+if [ "${1:-}" = "-v" ]; then
+  echo "Stopping and removing volumes..."
+  docker compose -f "$COMPOSE_FILE" down -v
+else
+  echo "Stopping containers..."
+  docker compose -f "$COMPOSE_FILE" down
+fi

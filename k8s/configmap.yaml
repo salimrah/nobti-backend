@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: noba-backend-config
+  labels:
+    app: noba-backend
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://noba-postgres:5432/noba"
+  SPRING_DATA_REDIS_URL: "redis://noba-redis:6379"
+  RABBITMQ_HOST: "noba-rabbitmq"
+  RABBITMQ_PORT: "5672"
+  APP_BASE_URL: "https://api.noba.ma"
+  JWT_ISSUER: "https://api.noba.ma"
+  EVENT_BUS_RABBITMQ_ENABLED: "true"
+  QUARTZ_JOB_STORE_TYPE: "jdbc"
+  TRACING_ENABLED: "false"
+  SENTRY_ENVIRONMENT: "production"

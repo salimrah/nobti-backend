@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!--
+      Exclusions for standard Spring Boot / Lombok / JPA patterns.
+    -->
+
+    <!-- Storing/returning mutable objects is inherent to Spring beans and JPA -->
+    <Match><Bug pattern="EI_EXPOSE_REP" /></Match>
+    <Match><Bug pattern="EI_EXPOSE_REP2" /></Match>
+
+    <!-- Catching generic Exception in crypto/OIDC code where needed -->
+    <Match><Bug pattern="REC_CATCH_EXCEPTION" /></Match>
+
+    <!-- Intentional RuntimeException throws -->
+    <Match><Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION" /></Match>
+
+    <!-- Unconfirmed cast in servlet filter / JPA repository -->
+    <Match><Bug pattern="BC_UNCONFIRMED_CAST" /></Match>
+    <Match><Bug pattern="BC_UNCONFIRMED_CAST_OF_RETURN_VALUE" /></Match>
+
+    <!-- Unread fields in configuration beans -->
+    <Match><Bug pattern="URF_UNREAD_FIELD" /></Match>
+
+    <!-- Public primitive in @ConfigurationProperties -->
+    <Match><Bug pattern="PA_PUBLIC_PRIMITIVE_ATTRIBUTE" /></Match>
+
+    <!-- Locale-dependent case conversion with known ASCII input -->
+    <Match><Bug pattern="DM_CONVERT_CASE" /></Match>
+
+    <!-- Overridable method called from constructor -->
+    <Match><Bug pattern="MC_OVERRIDABLE_METHOD_CALL_IN_CONSTRUCTOR" /></Match>
+
+    <!-- Constructor throws exception (validation in constructors) -->
+    <Match><Bug pattern="CT_CONSTRUCTOR_THROW" /></Match>
+
+    <!-- Equals/hashCode using getClass() is intentional for JPA -->
+    <Match>
+        <Bug pattern="EQ_CHECK_FOR_OPERAND_NOT_COMPATIBLE_WITH_THIS" />
+    </Match>
+
+    <!-- Lombok-generated classes -->
+    <Match><Class name="~.*\$\$.*" /></Match>
+
+    <!-- Spring Boot main class -->
+    <Match>
+        <Class name="ma.noba.NobaBackendApplication" />
+        <Bug pattern="DM_EXIT" />
+    </Match>
+</FindBugsFilter>

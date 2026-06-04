@@ -1,0 +1,342 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ${{ secrets.DOCKERHUB_USERNAME || 'docker.io' }}
+  IMAGE_NAME: noba-backend
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: noba
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build
+        run: ./mvnw clean compile -DskipTests
+
+      - name: Run Unit Tests
+        run: ./mvnw test
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/noba
+          SPRING_DATASOURCE_USERNAME: test
+          SPRING_DATASOURCE_PASSWORD: test
+          SPRING_DATA_REDIS_URL: redis://localhost:6379
+
+      - name: Run Integration Tests (Docker)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: ./mvnw test -Dgroups="docker"
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+
+  docker:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build JAR
+        run: ./mvnw clean package -DskipTests
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/noba-backend:latest,${{ secrets.DOCKERHUB_USERNAME }}/noba-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-staging:
+    needs: docker
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: staging
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        id: deploy-staging
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_SERVER_HOST }}
+          username: ${{ secrets.STAGING_SERVER_USER }}
+          key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.STAGING_SSH_PORT || 22 }}
+          script: |
+            set -e
+            echo "=== Pulling latest Docker image ==="
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/noba-backend:latest
+
+            echo "=== Deploying to STAGING ==="
+            cd /opt/noba
+
+            if [ -f "docker-compose.staging.yml" ]; then
+              DOCKER_IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/noba-backend \
+              SPRING_PROFILES_ACTIVE=staging \
+              docker compose -f docker-compose.staging.yml up -d --no-deps noba-backend
+            elif [ -f "docker-compose.app-only.yml" ]; then
+              DOCKER_IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/noba-backend \
+              SPRING_PROFILES_ACTIVE=staging \
+              docker compose -f docker-compose.app-only.yml up -d --no-deps noba-backend
+            fi
+
+            echo "=== Waiting for health check ==="
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+                echo "Staging health check passed after $i seconds"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then exit 1; fi
+              sleep 2
+            done
+
+      - name: Run staging smoke tests
+        id: staging-smoke
+        continue-on-error: true
+        run: |
+          chmod +x ./scripts/smoke-test.sh
+          ./scripts/smoke-test.sh http://${{ secrets.STAGING_SERVER_HOST }}:8080 30
+
+      - name: Staging rollback
+        if: steps.staging-smoke.outcome == 'failure'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_SERVER_HOST }}
+          username: ${{ secrets.STAGING_SERVER_USER }}
+          key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.STAGING_SSH_PORT || 22 }}
+          script: |
+            cd /opt/noba
+            PREV_IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' \
+              | grep '${{ secrets.DOCKERHUB_USERNAME }}/noba-backend' \
+              | grep -v 'latest' | head -1)
+            if [ -n "$PREV_IMAGE" ]; then
+              docker pull "$PREV_IMAGE"
+              docker compose -f docker-compose.app-only.yml up -d --no-deps noba-backend
+            fi
+
+      - name: Staging load tests (optional)
+        continue-on-error: true
+        run: |
+          if command -v k6 &> /dev/null; then
+            BASE_URL="http://${{ secrets.STAGING_SERVER_HOST }}:8080"
+            ./scripts/run-load-tests.sh "$BASE_URL" smoke
+          else
+            echo "k6 not installed — skipping load tests"
+          fi
+
+      - name: Notify staging deploy
+        if: always()
+        run: |
+          STATUS="${{ steps.staging-smoke.outcome == 'success' && '✅ Staging deploy succeeded' || '⚠️ Staging deploy failed/rolled back' }}"
+          curl -sf -X POST -H "Content-type: application/json" \
+            --data "{\"text\":\"$STATUS for \`noba-backend\`\nCommit: <https://github.com/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\"}" \
+            "${{ secrets.SLACK_WEBHOOK_URL }}" || true
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    concurrency: production
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Capture current running image
+        id: capture
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            IMAGE_ID=$(docker inspect --format='{{.Config.Image}}' noba-backend 2>/dev/null || echo "none")
+            echo "captured_image=$IMAGE_ID"
+          cmd_timeout: 30s
+
+      - name: Deploy to production
+        id: deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            echo "=== Pulling latest Docker image ==="
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/noba-backend:latest
+
+            echo "=== Deploying with Docker Compose ==="
+            cd /opt/noba
+
+            if [ -f "docker-compose.app-only.yml" ]; then
+              echo "Using app-only compose (external DB/Redis)"
+              DOCKER_IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/noba-backend \
+              docker compose -f docker-compose.app-only.yml up -d --no-deps noba-backend
+            elif [ -f "docker-compose.prod.yml" ]; then
+              echo "Using full-stack compose (app + DB + Redis)"
+              DOCKER_IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/noba-backend \
+              docker compose -f docker-compose.prod.yml up -d --no-deps noba-backend
+            else
+              echo "ERROR: No docker-compose file found on server!"
+              exit 1
+            fi
+
+            echo "=== Waiting for health check ==="
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+                echo "Health check passed after $i seconds"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "ERROR: Health check failed after 60 seconds"
+                curl -v http://localhost:8080/actuator/health || true
+                exit 1
+              fi
+              echo "Waiting... ($i/30)"
+              sleep 2
+            done
+
+      - name: Run production smoke tests
+        id: smoke
+        continue-on-error: true
+        run: |
+          chmod +x ./scripts/smoke-test.sh
+          ./scripts/smoke-test.sh http://${{ secrets.SERVER_HOST }}:8080 30
+
+      - name: Auto-rollback
+        if: steps.smoke.outcome == 'failure'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            echo "========================================="
+            echo " SMOKE TESTS FAILED — AUTO-ROLLBACK"
+            echo "========================================="
+
+            cd /opt/noba
+
+            PREV_IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' \
+              | grep '${{ secrets.DOCKERHUB_USERNAME }}/noba-backend' \
+              | grep -v 'latest' \
+              | head -1)
+
+            if [ -z "$PREV_IMAGE" ]; then
+              echo "ERROR: No previous image found to rollback to"
+              exit 1
+            fi
+
+            echo "Rolling back to: $PREV_IMAGE"
+            docker pull "$PREV_IMAGE"
+
+            if [ -f "docker-compose.app-only.yml" ]; then
+              DOCKER_IMAGE=$(echo "$PREV_IMAGE" | rev | cut -d: -f2- | rev) \
+              DOCKER_TAG=$(echo "$PREV_IMAGE" | rev | cut -d: -f1 | rev) \
+              docker compose -f docker-compose.app-only.yml up -d --no-deps noba-backend
+            elif [ -f "docker-compose.prod.yml" ]; then
+              DOCKER_IMAGE=$(echo "$PREV_IMAGE" | rev | cut -d: -f2- | rev) \
+              DOCKER_TAG=$(echo "$PREV_IMAGE" | rev | cut -d: -f1 | rev) \
+              docker compose -f docker-compose.prod.yml up -d --no-deps noba-backend
+            fi
+
+            echo "=== Waiting for health check after rollback ==="
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+                echo "Rollback health check passed after $i seconds"
+                echo "========================================="
+                echo " ROLLBACK COMPLETE — previous version is running"
+                exit 0
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "ERROR: Rollback health check also failed!"
+                exit 1
+              fi
+              sleep 2
+            done
+
+      - name: Notify production result
+        if: always()
+        run: |
+          if [ "${{ steps.smoke.outcome }}" == "success" ]; then
+            MSG="✅ *Production deploy succeeded* for \`noba-backend\`"
+          elif [ "${{ steps.smoke.outcome }}" == "failure" ]; then
+            MSG="⚠️ *Production rollback triggered* for \`noba-backend\`"
+          else
+            MSG="❌ *Production deploy failed* for \`noba-backend\`"
+          fi
+          curl -sf -X POST -H "Content-type: application/json" \
+            --data "{\"text\":\"$MSG\nCommit: <https://github.com/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\"}" \
+            "${{ secrets.SLACK_WEBHOOK_URL }}" || true
+
+      - name: Production load tests (optional)
+        if: steps.smoke.outcome == 'success'
+        continue-on-error: true
+        run: |
+          if command -v k6 &> /dev/null; then
+            BASE_URL="http://${{ secrets.SERVER_HOST }}:8080"
+            ./scripts/run-load-tests.sh "$BASE_URL" smoke
+          else
+            echo "k6 not installed — skipping load tests"
+          fi

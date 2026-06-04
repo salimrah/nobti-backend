@@ -1,0 +1,8 @@
+FROM flyway/flyway:10-alpine
+
+COPY src/main/resources/db/migration /flyway/sql
+
+ENV FLYWAY_BASELINE_ON_MIGRATE=true
+
+ENTRYPOINT ["flyway"]
+CMD ["migrate"]

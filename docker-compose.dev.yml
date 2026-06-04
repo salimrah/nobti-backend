@@ -1,0 +1,76 @@
+# Development — Local Machine
+# Use when: Running locally for development
+#
+# Start:  docker compose -f docker-compose.dev.yml up -d
+# Stop:   docker compose -f docker-compose.dev.yml down
+# Logs:   docker compose -f docker-compose.dev.yml logs -f noba-backend
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: noba-postgres-dev
+    environment:
+      POSTGRES_DB: noba
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: noba-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata-dev:/data
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: noba-rabbitmq-dev
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmqdata-dev:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: Run app in container for dev testing
+  # Usually you run `./mvnw spring-boot:run` directly on your machine instead
+  # Uncomment below if you want to run the app in Docker for dev
+  # noba-backend:
+  #   build: .
+  #   container_name: noba-backend-dev
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noba
+  #     SPRING_DATASOURCE_USERNAME: postgres
+  #     SPRING_DATASOURCE_PASSWORD: postgres
+  #     SPRING_DATA_REDIS_URL: redis://redis:6379
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_started
+
+volumes:
+  pgdata-dev:
+    driver: local
+  redisdata-dev:
+    driver: local
+  rabbitmqdata-dev:
+    driver: local

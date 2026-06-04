@@ -1,0 +1,131 @@
+# Production — Full Stack
+# Use when: Fresh VPS with no existing PostgreSQL or Redis
+#
+# Start:  docker compose -f docker-compose.prod.yml up -d
+# Stop:   docker compose -f docker-compose.prod.yml down
+#
+# NOTE: .env file on server holds secrets (never committed):
+#   DB_PASSWORD=your-secret
+#   JWT_SECRET=your-jwt-secret-256bit-minimum
+#   TWILIO_ACCOUNT_SID=...
+#   TWILIO_AUTH_TOKEN=...
+
+services:
+  noba-backend:
+    image: ${DOCKER_IMAGE:-noba-backend}:latest
+    container_name: noba-backend
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noba
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-postgres}
+      SPRING_DATA_REDIS_URL: redis://redis:6379
+      SECURITY_PII_SECRET_B64: ${SECURITY_PII_SECRET_B64}
+      JWT_ISSUER: ${JWT_ISSUER}
+      JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-3600}
+      JWT_REFRESH_TOKEN_TTL: ${JWT_REFRESH_TOKEN_TTL:-7}
+      JWT_KEY_ROTATION_HOURS: ${JWT_KEY_ROTATION_HOURS:-24}
+      HIKARI_MAX_POOL_SIZE: "20"
+      HIKARI_MIN_IDLE: "5"
+      # External services (set in .env or leave empty to disable)
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_SMS_FROM: ${TWILIO_SMS_FROM:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID:-}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET:-}
+      OAUTH_FACEBOOK_CLIENT_ID: ${OAUTH_FACEBOOK_CLIENT_ID:-}
+      OAUTH_FACEBOOK_CLIENT_SECRET: ${OAUTH_FACEBOOK_CLIENT_SECRET:-}
+      OAUTH_APPLE_CLIENT_ID: ${OAUTH_APPLE_CLIENT_ID:-}
+      OAUTH_APPLE_TEAM_ID: ${OAUTH_APPLE_TEAM_ID:-}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      TRACING_ENABLED: "${TRACING_ENABLED:-false}"
+      ZIPKIN_ENDPOINT: ${ZIPKIN_ENDPOINT:-http://localhost:9411/api/v2/spans}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - noba-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: noba-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: noba
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    networks:
+      - noba-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d noba"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: noba-redis
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - noba-network
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Migration Service — runs Flyway migrations manually BEFORE deploying
+  #
+  # Usage:
+  #   1. Build migration image:  docker compose build migration
+  #   2. Run migration:          docker compose -f docker-compose.prod.yml run --rm migration
+  #   3. Check logs for SUCCESS
+  #   4. Deploy new app:         docker compose -f docker-compose.prod.yml up -d noba-backend
+  # ─────────────────────────────────────────────────────────────────────────────
+  migration:
+    image: noba-backend-migration:latest
+    container_name: noba-migration
+    restart: no
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noba
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-postgres}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - noba-network
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+
+networks:
+  noba-network:
+    driver: bridge
