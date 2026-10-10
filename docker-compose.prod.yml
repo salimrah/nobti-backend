@@ -20,8 +20,8 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noba
-      SPRING_DATASOURCE_USERNAME: ${DB_USER:-postgres}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-postgres}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:?DB_USER must be set}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
       SPRING_DATA_REDIS_URL: redis://redis:6379
       SECURITY_PII_SECRET_B64: ${SECURITY_PII_SECRET_B64}
       JWT_ISSUER: ${JWT_ISSUER}
@@ -69,8 +69,8 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: noba
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_USER: ${DB_USER:?DB_USER must be set}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -78,7 +78,7 @@ services:
     networks:
       - noba-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d noba"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:?DB_USER must be set} -d noba"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -112,8 +112,8 @@ services:
       dockerfile: Dockerfile.migrate
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noba
-      SPRING_DATASOURCE_USERNAME: ${DB_USER:-postgres}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-postgres}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:?DB_USER must be set}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
     depends_on:
       postgres:
         condition: service_healthy

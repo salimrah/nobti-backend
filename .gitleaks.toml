@@ -1,0 +1,12 @@
+title = "noba-backend gitleaks config"
+
+[extend]
+useDefault = true
+
+# Allow known, non-sensitive placeholders that are safe to commit.
+[allowlist]
+description = "Ignore test fixtures and example env placeholders"
+paths = [
+  '''src/test/.*''',
+  '''\.env\.example$''',
+]

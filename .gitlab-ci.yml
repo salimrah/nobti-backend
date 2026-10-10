@@ -1,4 +1,5 @@
 stages:
+  - secret-scan
   - build
   - test
   - docker
@@ -18,6 +19,18 @@ cache:
   key: "${CI_COMMIT_REF_SLUG}-maven"
   paths:
     - .m2/repository
+
+secret-scan:
+  stage: secret-scan
+  image:
+    name: ghcr.io/gitleaks/gitleaks:latest
+    entrypoint: [""]
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - gitleaks detect --source . --config .gitleaks.toml --redact --verbose
+  rules:
+    - when: always
 
 build:
   stage: build

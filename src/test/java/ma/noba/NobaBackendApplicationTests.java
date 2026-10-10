@@ -9,7 +9,10 @@ import org.springframework.test.context.TestPropertySource;
 @SpringBootTest
 @TestPropertySource(properties = {
         "spring.data.redis.url=redis://localhost:6379",
-        "spring.datasource.url=jdbc:postgresql://localhost:5432/noba"
+        "spring.datasource.url=jdbc:postgresql://localhost:5432/noba",
+        "security.pii.secret-b64=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "spring.rabbitmq.username=guest",
+        "spring.rabbitmq.password=guest"
 })
 class NobaBackendApplicationTests {
 

@@ -35,6 +35,8 @@ public abstract class AbstractIntegrationTest {
         registry.add("otp.providers.sms.active", () -> "none");
         registry.add("otp.providers.whatsapp.active", () -> "none");
         registry.add("security.pii.secret-b64", () -> "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+        registry.add("spring.rabbitmq.username", () -> "guest");
+        registry.add("spring.rabbitmq.password", () -> "guest");
         registry.add("security.jwt.access-token-ttl-seconds", () -> "3600");
         registry.add("security.jwt.refresh-token-ttl-days", () -> "7");
         registry.add("security.jwt.issuer", () -> "https://api.noba.ma");
