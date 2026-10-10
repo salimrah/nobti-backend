@@ -1,11 +1,10 @@
 package ma.noba.identity.domain.exception;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
+import ma.noba.shared.domain.exception.DomainException;
+import ma.noba.shared.domain.exception.ErrorCode;
 
-@ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
-public class AttemptsExhaustedException extends RuntimeException {
+public class AttemptsExhaustedException extends DomainException {
     public AttemptsExhaustedException(String message) {
-        super(message);
+        super(ErrorCode.OTP_ATTEMPTS_EXHAUSTED, message);
     }
 }

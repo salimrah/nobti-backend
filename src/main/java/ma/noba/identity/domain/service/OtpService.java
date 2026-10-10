@@ -93,10 +93,14 @@ public class OtpService {
         boolean ok = otpEncoder.matches(code, challenge.getCodeHash());
         if (!ok) {
             challenge.setAttempts(challenge.getAttempts() + 1);
+            int remaining = challenge.getMaxAttempts() - challenge.getAttempts();
             repository.save(challenge, otpConfig.ttl());
             meterRegistry.counter("otp.verify.fail", "channel", challenge.getChannel().name()).increment();
             eventBus.publish(new OtpFailedEvent("Invalid code"));
-            throw new InvalidCodeException("Invalid code");
+            String msg = remaining > 0
+                    ? "Invalid code — " + remaining + " attempt" + (remaining == 1 ? "" : "s") + " remaining"
+                    : "Invalid code — no attempts remaining";
+            throw new InvalidCodeException(msg);
         }
         String target = challenge.getTarget();
         if (repository.delete(challenge.getId())) {
