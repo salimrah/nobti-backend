@@ -42,7 +42,9 @@ public class OtpService {
 
     public String startChallenge(String targetRaw, OtpChannel channel, String purpose, Locale locale, String idempotencyKey) {
         String target = otpTargetNormalizer.normalize(targetRaw, channel);
-        String rateKey = "rl:otp:send:" + purpose + ":" + channel + ":" + target;
+        // The rate-limit key must NOT include the caller-supplied purpose, otherwise an attacker
+        // could rotate purpose values to bypass the per-target send limit.
+        String rateKey = "rl:otp:send:" + channel + ":" + target;
         if (!rateLimiter.tryConsume(rateKey, 1)) throw new TooManyRequestsException("Rate limit");
 
         String idemKey = idempotencyKey != null ? DigestUtils.sha256Hex(idempotencyKey) : null;
@@ -85,16 +87,18 @@ public class OtpService {
     public OtpVerificationResult verify(String challengeId, String code) {
         var challenge = repository.find(challengeId).orElseThrow(() -> new ChallengeNotFoundException("Challenge not found"));
 
-        String rateKey = "rl:otp:verify:" + challenge.getPurpose() + ":" + challenge.getChannel() + ":" + challenge.getTarget();
+        String rateKey = "rl:otp:verify:" + challenge.getChannel() + ":" + challenge.getTarget();
         if (!rateLimiter.tryConsume(rateKey, 1)) throw new TooManyRequestsException("Rate limit");
 
         if (challenge.getStatus() != OtpChallengeStatus.PENDING) throw new InvalidCodeException("Challenge is not pending");
-        if (challenge.getAttempts() >= challenge.getMaxAttempts()) throw new AttemptsExhaustedException("Too many attempts");
+
+        // Atomic increment: concurrent guesses must not each read the same stale attempt count.
+        int attempts = repository.incrementAttempts(challenge.getId(), otpConfig.ttl());
+        if (attempts > challenge.getMaxAttempts()) throw new AttemptsExhaustedException("Too many attempts");
+
         boolean ok = otpEncoder.matches(code, challenge.getCodeHash());
         if (!ok) {
-            challenge.setAttempts(challenge.getAttempts() + 1);
-            int remaining = challenge.getMaxAttempts() - challenge.getAttempts();
-            repository.save(challenge, otpConfig.ttl());
+            int remaining = Math.max(0, challenge.getMaxAttempts() - attempts);
             meterRegistry.counter("otp.verify.fail", "channel", challenge.getChannel().name()).increment();
             eventBus.publish(new OtpFailedEvent("Invalid code"));
             String msg = remaining > 0

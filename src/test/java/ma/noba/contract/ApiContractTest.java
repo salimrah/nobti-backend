@@ -29,17 +29,33 @@ class ApiContractTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void listCategoriesReturns200() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/api/v1/providers/categories", String.class);
+    void searchProvidersReturns200() {
+        // Public discovery endpoint. (Categories live under /providers/self/categories and are not public.)
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                "/api/v1/providers/search?category=Haircut", String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
     }
 
     @Test
-    void queueStatusForNonexistentProviderReturns200() {
+    void websocketHandshakeEndpointIsPublic() {
+        // SockJS exposes /ws/info; the handshake must be reachable without authentication so
+        // clients can subscribe to queue updates.
+        ResponseEntity<String> response = restTemplate.getForEntity("/ws/info", String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void unauthenticatedProtectedEndpointReturns401() {
+        // Protected endpoints must return 401 (not the default 403) for anonymous callers.
+        ResponseEntity<String> response = restTemplate.getForEntity("/api/v1/users/me", String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void queueStatusForProviderWithoutQueueReturns404() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 "/api/v1/queues/providers/00000000-0000-0000-0000-000000000000/status", String.class);
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 }

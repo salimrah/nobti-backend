@@ -17,6 +17,13 @@ public class PurchaseGiftCardRequest {
     @Positive
     private BigDecimal amount;
 
+    /**
+     * The SUCCEEDED payment transaction that funds this gift card. Issuance is gated on a
+     * verified payment so gift cards can no longer be minted without paying.
+     */
+    @NotNull
+    private UUID paymentTransactionId;
+
     private String recipientName;
 
     private String message;

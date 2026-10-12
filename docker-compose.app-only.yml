@@ -1,8 +1,8 @@
 # Production — App Only
 # Use when: PostgreSQL and Redis already exist (managed cloud: RDS, ElastiCache, etc.)
 #
-# Start:  docker compose -f docker-compose.app-only.yml up -d
-# Stop:   docker compose -f docker-compose.app-only.yml down
+# Start: docker compose -f docker-compose.app-only.yml up -d
+# Stop: docker compose -f docker-compose.app-only.yml down
 #
 # NOTE: .env file on server holds secrets (never committed):
 #   SPRING_DATASOURCE_URL=jdbc:postgresql://your-rds-host:5432/noba

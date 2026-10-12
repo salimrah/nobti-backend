@@ -43,6 +43,8 @@ class QueueApplicationServiceTest {
     @Mock EventBus eventBus;
     @Mock BusinessHoursPort businessHoursPort;
     @Mock QueueScheduler queueScheduler;
+    @Mock ma.noba.queue.domain.port.service.ClientDisplayNamePort clientDisplayNamePort;
+    @Mock ma.noba.queue.application.service.QueueWebSocketService queueWebSocketService;
 
     private QueueApplicationService service;
     private UUID providerId;
@@ -51,7 +53,8 @@ class QueueApplicationServiceTest {
     @BeforeEach
     void setUp() {
         service = new QueueApplicationService(queueRepository, memberRepository,
-                durationEstimator, notificationPort, eventBus, businessHoursPort, queueScheduler);
+                durationEstimator, notificationPort, eventBus, businessHoursPort, queueScheduler,
+                clientDisplayNamePort, queueWebSocketService);
         providerId = UUID.randomUUID();
         clientId = UUID.randomUUID();
     }
@@ -179,6 +182,24 @@ class QueueApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("Mark no-show — removes the member and promotes the next")
+    void markNoShowPromotesNext() {
+        var queue = createQueue();
+        var first = addMember(queue, clientId);
+        var second = addMember(queue, UUID.randomUUID());
+        queue.advanceToNext(); // first becomes ACTIVE (serving)
+
+        when(queueRepository.findByProviderId(providerId)).thenReturn(Optional.of(queue));
+        when(queueRepository.save(any(Queue.class))).thenReturn(queue);
+
+        service.markNoShow(providerId, first.getId());
+
+        assertThat(queue.getActiveMembers()).extracting(QueueMember::getId).contains(second.getId());
+        assertThat(queue.getActiveMembers()).extracting(QueueMember::getStatus).contains(QueueMemberStatus.ACTIVE);
+        verify(eventBus, atLeastOnce()).publish(any());
+    }
+
+    @Test
     @DisplayName("Pause queue — sets status to PAUSED")
     void pauseQueue_success() {
         var queue = createQueue();
@@ -213,6 +234,20 @@ class QueueApplicationServiceTest {
         service.closeQueue(providerId);
 
         assertThat(queue.getStatus()).isEqualTo(QueueStatus.CLOSED);
+    }
+
+    @Test
+    @DisplayName("Queue members expose the client display name (not a raw id)")
+    void queueMembersIncludeClientName() {
+        var queue = createQueue();
+        addMember(queue, clientId);
+        when(queueRepository.findByProviderId(providerId)).thenReturn(Optional.of(queue));
+        when(clientDisplayNamePort.findDisplayNames(any())).thenReturn(java.util.Map.of(clientId, "Amine"));
+
+        var result = service.getQueueMembers(providerId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).clientName()).isEqualTo("Amine");
     }
 
     @Test

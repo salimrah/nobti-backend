@@ -19,6 +19,14 @@
         <jacoco.version>0.8.12</jacoco.version>
         <spotbugs.version>4.8.6</spotbugs.version>
         <spotbugs-maven-plugin.version>4.9.2.0</spotbugs-maven-plugin.version>
+        <!-- Default unit run excludes the Testcontainers ("docker") integration suite; CI runs it
+             explicitly with `-Dgroups=docker -DexcludedGroups=`. Defined as a property (not plugin
+             config) so the CLI can override it. -->
+        <excludedGroups>docker</excludedGroups>
+        <!-- Docker REST API version used by the Testcontainers docker-java client. Its default
+             (1.32) is rejected by modern Docker daemons (>= 1.40 required), which manifests as
+             "Could not find a valid Docker environment". Override with -Ddocker.api.version=... -->
+        <docker.api.version>1.44</docker.api.version>
     </properties>
 
     <dependencies>
@@ -374,7 +382,9 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>${jacoco.agent.argLine}</argLine>
-                    <excludedGroups>docker</excludedGroups>
+                    <systemPropertyVariables>
+                        <api.version>${docker.api.version}</api.version>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>

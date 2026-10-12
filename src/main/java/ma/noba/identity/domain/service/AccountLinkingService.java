@@ -43,6 +43,8 @@ public class AccountLinkingService {
                 .user(user)
                 .providerType(providerType)
                 .identifierHash(subHash)
+                // Required NOT NULL column — must be populated on insert.
+                .normalizedIdentifier(providerType + ":" + profile.subject().toLowerCase(Locale.ROOT))
                 .isPrimary(true)
                 .verifiedAt(Instant.now())
                 .build());

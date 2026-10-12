@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class InMemoryOtpChallengeRepository implements OtpChallengeRepository {
 
     private final Map<String, Entry> store = new ConcurrentHashMap<>();
+    private final Map<String, Integer> attempts = new ConcurrentHashMap<>();
 
     @Override
     public void save(OtpChallenge challenge, Duration ttl) {
@@ -35,7 +36,13 @@ public class InMemoryOtpChallengeRepository implements OtpChallengeRepository {
 
     @Override
     public boolean delete(String id) {
+        attempts.remove(id);
         return store.remove(id) != null;
+    }
+
+    @Override
+    public int incrementAttempts(String id, Duration ttl) {
+        return attempts.merge(id, 1, Integer::sum);
     }
 
     private record Entry(OtpChallenge challenge, Instant expiry) {}

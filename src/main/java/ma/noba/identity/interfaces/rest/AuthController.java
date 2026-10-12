@@ -74,7 +74,10 @@ public class AuthController {
 
     @PostMapping("/token/refresh")
     public AuthToken refresh(@Valid @RequestBody RefreshTokenRequest req) {
-        if (!rateLimiter.tryConsume("rl:token:refresh:" + req.refreshToken().hashCode(), 1)) {
+        // Key by the token's SHA-256 hash (not String.hashCode), so distinct tokens cannot collide
+        // into the same rate-limit bucket.
+        if (!rateLimiter.tryConsume(
+                "rl:token:refresh:" + org.apache.commons.codec.digest.DigestUtils.sha256Hex(req.refreshToken()), 1)) {
             throw new TooManyRequestsException("Rate limit");
         }
         return tokenService.refresh(req.refreshToken());
@@ -111,13 +114,21 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@RequestBody LogoutRequest req) {
-        if (req.accessToken() != null) {
-            tokenService.revoke(req.accessToken());
+    public ResponseEntity<Void> logout(
+            @RequestBody(required = false) LogoutRequest req,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        // Revoke the bearer access token presented in the Authorization header, if any.
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            tokenService.revoke(authorization.substring(7));
         }
-        if (req.refreshToken() != null) {
-            var hash = org.apache.commons.codec.digest.DigestUtils.sha256Hex(req.refreshToken());
-            tokenService.revokeRefreshToken(hash);
+        if (req != null) {
+            if (req.accessToken() != null) {
+                tokenService.revoke(req.accessToken());
+            }
+            if (req.refreshToken() != null) {
+                var hash = org.apache.commons.codec.digest.DigestUtils.sha256Hex(req.refreshToken());
+                tokenService.revokeRefreshToken(hash);
+            }
         }
         return ResponseEntity.noContent().build();
     }

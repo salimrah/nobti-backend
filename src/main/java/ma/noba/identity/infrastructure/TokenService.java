@@ -74,31 +74,24 @@ public class TokenService implements TokenPort {
     @Transactional
     public AuthToken refresh(String refreshToken) {
         String hash = sha256(refreshToken);
-        var record = refreshRepo.findByTokenHashAndRevokedAtIsNull(hash)
+        // Look up the token regardless of revocation so a previously rotated/revoked token can be
+        // recognised as reuse instead of being silently reported as merely invalid.
+        var record = refreshRepo.findByTokenHash(hash)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
-        if (record.getExpiresAt().isBefore(Instant.now())) throw new IllegalArgumentException("Expired refresh token");
 
-        if (record.getRotationParentId() != null) {
+        if (record.isRevoked()) {
             log.warn("Refresh token reuse detected for user {}, revoking all sessions", record.getUser().getId());
             revokeAllUserTokens(record.getUser().getId());
             throw new ValidationException(ErrorCode.AUTH_TOKEN_REUSE, "Refresh token reuse detected");
         }
+        if (record.getExpiresAt().isBefore(Instant.now())) throw new IllegalArgumentException("Expired refresh token");
 
-        UUID rotationParentId = record.getId();
         UUID deviceId = record.getDeviceId();
         record.revoke("rotated");
         refreshRepo.save(record);
 
         var user = record.getUser();
-        var newTokens = issueForUser(user, deviceId);
-
-        refreshRepo.findByTokenHashAndRevokedAtIsNull(sha256(newTokens.refreshToken()))
-                .ifPresent(rt -> {
-                    rt.setRotationParentId(rotationParentId);
-                    refreshRepo.save(rt);
-                });
-
-        return newTokens;
+        return issueForUser(user, deviceId);
     }
 
     @Transactional

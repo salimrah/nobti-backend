@@ -44,9 +44,13 @@ public class ProviderPayoutSettings {
         this.updatedAt = Instant.now();
     }
 
-    public void updateStripeAccount(String stripeAccountId) {
+    /**
+     * Sets the connected account and whether payouts are enabled. {@code payoutsEnabled} must come
+     * from a verified Stripe account status, never merely from a non-null account id.
+     */
+    public void updateStripeAccount(String stripeAccountId, boolean payoutsEnabled) {
         this.stripeAccountId = stripeAccountId;
-        this.payoutsEnabled = stripeAccountId != null;
+        this.payoutsEnabled = stripeAccountId != null && payoutsEnabled;
         this.updatedAt = Instant.now();
     }
 }

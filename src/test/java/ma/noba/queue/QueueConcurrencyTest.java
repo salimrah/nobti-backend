@@ -59,7 +59,9 @@ class QueueConcurrencyTest extends AbstractIntegrationTest {
     private String signupAndLogin(String email) {
         String password = "Pass1234!";
         SignupRequest signup = new SignupRequest(email, password, "Test", "User");
-        restTemplate.postForEntity(baseUrl() + "/auth/signup", signup, Map.class);
+        ResponseEntity<Map> signupResponse = restTemplate.postForEntity(baseUrl() + "/auth/signup", signup, Map.class);
+        assertThat(signupResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        verifyEmail(UUID.fromString((String) signupResponse.getBody().get("userId")));
 
         PasswordAuthRequest login = new PasswordAuthRequest(email, password, null);
         ResponseEntity<Map> loginResponse = restTemplate.postForEntity(baseUrl() + "/auth/login", login, Map.class);
@@ -83,7 +85,20 @@ class QueueConcurrencyTest extends AbstractIntegrationTest {
         ResponseEntity<ProviderResponse> response = restTemplate.postForEntity(
                 baseUrl() + "/providers/self", entity, ProviderResponse.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        setBusinessHours(token);
         return response.getBody().id();
+    }
+
+    /** The queue can only be joined while the provider is open, so open all week. */
+    private void setBusinessHours(String token) {
+        List<Map<String, Object>> days = new ArrayList<>();
+        for (int day = 1; day <= 7; day++) {
+            days.add(Map.of("dayOfWeek", day, "opensAt", "00:00", "closesAt", "23:59", "closed", false));
+        }
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(Map.of("days", days), authHeaders(token));
+        ResponseEntity<Void> response = restTemplate.exchange(
+                baseUrl() + "/providers/self/hours", HttpMethod.PUT, entity, Void.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     @Test
@@ -104,10 +119,10 @@ class QueueConcurrencyTest extends AbstractIntegrationTest {
             restTemplate.postForEntity(baseUrl() + "/queues/providers/" + providerId + "/join", entity, JoinQueueResponse.class);
         }
 
-        ResponseEntity<QueueMemberResponse[]> membersBefore = restTemplate.exchange(
-                baseUrl() + "/queues/providers/" + providerId + "/members",
-                HttpMethod.GET, null, QueueMemberResponse[].class);
-        assertThat(membersBefore.getBody()).hasSize(clientCount);
+        ResponseEntity<Map> membersBefore = restTemplate.exchange(
+                baseUrl() + "/queues/providers/" + providerId + "/members?size=50",
+                HttpMethod.GET, new HttpEntity<>(authHeaders(providerToken)), Map.class);
+        assertThat((List<?>) membersBefore.getBody().get("content")).hasSize(clientCount);
 
         int advanceCount = clientCount + 1;
         CountDownLatch readyLatch = new CountDownLatch(advanceCount);
@@ -187,9 +202,9 @@ class QueueConcurrencyTest extends AbstractIntegrationTest {
         executor.shutdown();
         executor.awaitTermination(10, TimeUnit.SECONDS);
 
-        ResponseEntity<QueueMemberResponse[]> finalMembers = restTemplate.exchange(
-                baseUrl() + "/queues/providers/" + providerId + "/members",
-                HttpMethod.GET, null, QueueMemberResponse[].class);
+        ResponseEntity<Map> finalMembers = restTemplate.exchange(
+                baseUrl() + "/queues/providers/" + providerId + "/members?size=50",
+                HttpMethod.GET, new HttpEntity<>(authHeaders(providerToken)), Map.class);
         assertThat(finalMembers.getBody()).isNotNull();
     }
 }

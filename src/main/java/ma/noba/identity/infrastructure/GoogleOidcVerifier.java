@@ -54,10 +54,12 @@ public class GoogleOidcVerifier implements SocialProviderVerifier {
                 throw new InvalidTokenException("Token expired");
             }
 
+            boolean emailVerified = Boolean.TRUE.equals(claims.getClaim("email_verified"));
             return new SocialProfile(
                     claims.getSubject(),
                     claims.getStringClaim("email"),
-                    claims.getStringClaim("name")
+                    claims.getStringClaim("name"),
+                    emailVerified
             );
         } catch (InvalidTokenException e) {
             throw e;

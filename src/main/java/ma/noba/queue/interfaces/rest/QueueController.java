@@ -5,6 +5,7 @@ import ma.noba.queue.application.dto.QueueMemberResponse;
 import ma.noba.queue.application.dto.QueueStatusResponse;
 import ma.noba.queue.application.service.QueueApplicationService;
 import jakarta.validation.constraints.Positive;
+import ma.noba.payment.domain.port.ProviderLookupPort;
 import ma.noba.queue.domain.model.QueuePriority;
 import ma.noba.shared.application.dto.PagedResponse;
 import ma.noba.shared.domain.user.UserPrincipal;
@@ -14,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.util.List;
@@ -25,9 +27,11 @@ import java.util.UUID;
 public class QueueController {
 
     private final QueueApplicationService queueService;
+    private final ProviderLookupPort providerLookupPort;
 
-    public QueueController(QueueApplicationService queueService) {
+    public QueueController(QueueApplicationService queueService, ProviderLookupPort providerLookupPort) {
         this.queueService = queueService;
+        this.providerLookupPort = providerLookupPort;
     }
 
     @PostMapping("/providers/{providerId}/join")
@@ -63,8 +67,9 @@ public class QueueController {
             @AuthenticationPrincipal UserPrincipal user,
             @PathVariable UUID providerId,
             Pageable pageable) {
-        if (!user.isProvider() || !user.id().equals(providerId)) {
-            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
+        // The queue is keyed by the provider entity id, which is distinct from the owner's user id.
+        if (!providerId.equals(currentProviderIdOrNull(user))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         PagedResponse<QueueMemberResponse> responses = queueService.getQueueMembers(providerId, pageable);
         return ResponseEntity.ok(responses);
@@ -86,37 +91,50 @@ public class QueueController {
 
     @PostMapping("/providers/self/pause")
     public ResponseEntity<Void> pauseQueue(@AuthenticationPrincipal UserPrincipal user) {
-        if (!user.isProvider()) {
-            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
-        }
-        queueService.pauseQueue(user.id());
+        queueService.pauseQueue(requireProviderId(user));
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/providers/self/resume")
     public ResponseEntity<Void> resumeQueue(@AuthenticationPrincipal UserPrincipal user) {
-        if (!user.isProvider()) {
-            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
-        }
-        queueService.resumeQueue(user.id());
+        queueService.resumeQueue(requireProviderId(user));
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/providers/self/close")
     public ResponseEntity<Void> closeQueue(@AuthenticationPrincipal UserPrincipal user) {
-        if (!user.isProvider()) {
-            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
-        }
-        queueService.closeQueue(user.id());
+        queueService.closeQueue(requireProviderId(user));
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/providers/self/next")
     public ResponseEntity<Void> advanceQueue(@AuthenticationPrincipal UserPrincipal user) {
-        if (!user.isProvider()) {
-            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
-        }
-        queueService.advanceQueue(user.id());
+        queueService.advanceQueue(requireProviderId(user));
         return ResponseEntity.ok().build();
+    }
+
+    /** Mark a waiting client as a no-show; the next waiting client is auto-promoted. */
+    @PostMapping("/providers/self/members/{memberId}/no-show")
+    public ResponseEntity<Void> markNoShow(
+            @AuthenticationPrincipal UserPrincipal user,
+            @PathVariable UUID memberId) {
+        queueService.markNoShow(requireProviderId(user), memberId);
+        return ResponseEntity.ok().build();
+    }
+
+    /** Resolves the provider entity id for the authenticated provider, or 403 if not a provider. */
+    private UUID requireProviderId(UserPrincipal user) {
+        if (user == null || !user.isProvider()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+        return providerLookupPort.findProviderIdByUserId(user.id())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No provider profile"));
+    }
+
+    private UUID currentProviderIdOrNull(UserPrincipal user) {
+        if (user == null || !user.isProvider()) {
+            return null;
+        }
+        return providerLookupPort.findProviderIdByUserId(user.id()).orElse(null);
     }
 }

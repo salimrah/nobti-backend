@@ -23,27 +23,27 @@ public class LoyaltyController {
     private final ProviderLookupPort providerLookupPort;
 
     @GetMapping("/me")
-    public ResponseEntity<MyLoyaltyResponse> getMyLoyalty(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<MyLoyaltyResponse> getMyLoyalty(@AuthenticationPrincipal(expression = "id") UUID userId) {
         return ResponseEntity.ok(loyaltyService.getMyLoyalty(userId));
     }
 
     @GetMapping("/providers/{providerId}")
     public ResponseEntity<LoyaltyResponse> getProviderLoyalty(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @PathVariable UUID providerId
     ) {
         return ResponseEntity.ok(loyaltyService.getProviderLoyalty(userId, providerId));
     }
 
     @GetMapping("/providers/self/rewards")
-    public ResponseEntity<List<LoyaltyRewardResponse>> getMyRewards(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<List<LoyaltyRewardResponse>> getMyRewards(@AuthenticationPrincipal(expression = "id") UUID userId) {
         UUID providerId = getProviderIdForUser(userId);
         return ResponseEntity.ok(loyaltyService.getProviderRewards(providerId));
     }
 
     @PostMapping("/providers/self/rewards")
     public ResponseEntity<LoyaltyRewardResponse> createReward(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody CreateRewardRequest request
     ) {
         UUID providerId = getProviderIdForUser(userId);
@@ -52,14 +52,17 @@ public class LoyaltyController {
     }
 
     @DeleteMapping("/providers/self/rewards/{rewardId}")
-    public ResponseEntity<Void> deactivateReward(@PathVariable UUID rewardId) {
-        loyaltyService.deactivateReward(rewardId);
+    public ResponseEntity<Void> deactivateReward(
+        @AuthenticationPrincipal(expression = "id") UUID userId,
+        @PathVariable UUID rewardId
+    ) {
+        loyaltyService.deactivateReward(rewardId, getProviderIdForUser(userId));
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/rewards/{rewardId}/redeem")
     public ResponseEntity<RedeemRewardResponse> redeemReward(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @PathVariable UUID rewardId
     ) {
         return ResponseEntity.ok(loyaltyService.redeemReward(userId, rewardId));

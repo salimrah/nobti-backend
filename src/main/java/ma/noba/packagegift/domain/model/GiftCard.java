@@ -32,6 +32,10 @@ public class GiftCard {
     @Column(name = "redeemer_id")
     private UUID redeemerId;
 
+    /** Payment transaction that funds this gift card (null for legacy pre-payment cards). */
+    @Column(name = "payment_transaction_id")
+    private UUID paymentTransactionId;
+
     @Column(name = "recipient_name", length = 255)
     private String recipientName;
 

@@ -24,7 +24,7 @@ public class AnnouncementController {
 
     @PostMapping("/api/v1/providers/self/announcements")
     public ResponseEntity<AnnouncementResponse> createAnnouncement(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody CreateAnnouncementRequest request
     ) {
         UUID providerId = getProviderId(userId);
@@ -38,7 +38,7 @@ public class AnnouncementController {
     }
 
     @GetMapping("/api/v1/providers/self/announcements")
-    public ResponseEntity<List<AnnouncementResponse>> getMyAnnouncements(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<List<AnnouncementResponse>> getMyAnnouncements(@AuthenticationPrincipal(expression = "id") UUID userId) {
         UUID providerId = getProviderId(userId);
         return ResponseEntity.ok(announcementService.getAllProviderAnnouncements(providerId));
     }

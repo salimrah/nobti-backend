@@ -20,20 +20,20 @@ public class ReferralController {
     private final ReferralApplicationService referralService;
 
     @PostMapping("/create")
-    public ResponseEntity<CreateReferralResponse> createReferral(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<CreateReferralResponse> createReferral(@AuthenticationPrincipal(expression = "id") UUID userId) {
         return ResponseEntity.ok(referralService.createReferral(userId));
     }
 
     @PostMapping("/claim")
     public ResponseEntity<ReferralResponse> claimReferral(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody ClaimReferralRequest request
     ) {
         return ResponseEntity.ok(referralService.claimReferral(userId, request.getCode()));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<List<ReferralResponse>> getMyReferrals(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<List<ReferralResponse>> getMyReferrals(@AuthenticationPrincipal(expression = "id") UUID userId) {
         return ResponseEntity.ok(referralService.getMyReferrals(userId));
     }
 }

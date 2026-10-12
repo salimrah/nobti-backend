@@ -26,6 +26,10 @@ import java.util.concurrent.TimeUnit;
 public class JwtKeyManager {
 
     private final Map<String, RSAKey> keys = new ConcurrentHashMap<>();
+    private final java.util.Deque<String> keyOrder = new java.util.concurrent.ConcurrentLinkedDeque<>();
+
+    /** How many signing keys are kept valid at once (current + previous, to survive rotation). */
+    private static final int RETAINED_KEYS = 2;
 
     @Getter
     private volatile String currentKid;
@@ -48,8 +52,19 @@ public class JwtKeyManager {
                     .keyID(UUID.randomUUID().toString())
                     .build();
 
-            keys.put(jwk.getKeyID(), jwk);
-            currentKid = jwk.getKeyID();
+            String kid = jwk.getKeyID();
+            keys.put(kid, jwk);
+            currentKid = kid;
+
+            // Retire older keys so a rotated (e.g. compromised) key stops validating new tokens,
+            // and the key map does not grow without bound.
+            keyOrder.addLast(kid);
+            while (keyOrder.size() > RETAINED_KEYS) {
+                String retired = keyOrder.pollFirst();
+                if (retired != null) {
+                    keys.remove(retired);
+                }
+            }
 
         } catch (Exception e) {
             throw new IllegalStateException("Failed to rotate JWT key", e);

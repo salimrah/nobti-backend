@@ -50,12 +50,9 @@ public class ProviderSearchViewSyncListener {
         log.info("ProviderSearchView synced for updated provider: {}", event.providerId());
     }
 
-    @Async("domainEvents")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void onProviderDeleted(ProviderUpdatedEvent event) {
-        searchViewRepository.deleteById(event.providerId());
-        log.info("ProviderSearchView removed for deleted provider: {}", event.providerId());
-    }
+    // NOTE: a previous handler deleted the search-view row on every ProviderUpdatedEvent (there is
+    // no ProviderDeletedEvent), racing with onProviderUpdated and removing active providers from
+    // search. Removed. Re-introduce deletion only when a real provider-deleted event exists.
 
     @Async("domainEvents")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

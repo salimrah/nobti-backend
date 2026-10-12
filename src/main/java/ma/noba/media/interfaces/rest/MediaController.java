@@ -33,7 +33,7 @@ public class MediaController {
 
     @PostMapping("/reviews/{reviewId}/media")
     public ResponseEntity<ReviewMediaResponse> addMedia(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @PathVariable UUID reviewId,
         @Valid @RequestBody AddMediaRequest request
     ) {
@@ -54,7 +54,7 @@ public class MediaController {
 
     @PostMapping("/providers/self/media")
     public ResponseEntity<ProviderMediaResponse> addProviderMedia(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody AddProviderMediaRequest request
     ) {
         UUID providerId = getProviderId(userId);

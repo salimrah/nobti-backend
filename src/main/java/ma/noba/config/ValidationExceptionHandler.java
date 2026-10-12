@@ -2,6 +2,8 @@ package ma.noba.config;
 
 import ma.noba.shared.domain.exception.ErrorCode;
 import ma.noba.shared.domain.exception.ErrorResponse;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -13,7 +15,13 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * Must be ordered ahead of {@link GlobalExceptionHandler}: that advice declares an
+ * {@code @ExceptionHandler(Exception.class)} fallback which otherwise captures
+ * {@link MethodArgumentNotValidException} first and turns every bean-validation failure into a 500.
+ */
 @RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class ValidationExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

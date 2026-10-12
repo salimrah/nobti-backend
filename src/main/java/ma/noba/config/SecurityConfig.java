@@ -1,6 +1,6 @@
 package ma.noba.config;
 
-import ma.noba.identity.infrastructure.JwtLogoutHandler;
+import ma.noba.identity.infrastructure.ProblemDetailsAuthEntryPoint;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,15 +26,17 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ApiKeyAuthenticationFilter apiKeyAuthenticationFilter;
-    private final JwtLogoutHandler jwtLogoutHandler;
+    private final ProblemDetailsAuthEntryPoint problemDetailsAuthEntryPoint;
 
     @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173,http://localhost:8081,http://localhost:19006}")
     private List<String> allowedOrigins;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, ApiKeyAuthenticationFilter apiKeyAuthenticationFilter, JwtLogoutHandler jwtLogoutHandler) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+                          ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
+                          ProblemDetailsAuthEntryPoint problemDetailsAuthEntryPoint) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.apiKeyAuthenticationFilter = apiKeyAuthenticationFilter;
-        this.jwtLogoutHandler = jwtLogoutHandler;
+        this.problemDetailsAuthEntryPoint = problemDetailsAuthEntryPoint;
     }
 
     @Bean
@@ -53,15 +55,37 @@ public class SecurityConfig {
                         .contentSecurityPolicy(csp -> csp
                                 .policyDirectives("default-src 'self'; script-src 'none'; style-src 'none'")))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // Return 401 (not the default 403) for unauthenticated requests to protected endpoints.
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(problemDetailsAuthEntryPoint))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/sessions/**").authenticated()
                         .requestMatchers("/api/v1/providers/self/**").authenticated()
                         .requestMatchers("/api/v1/providers/*/wait-insights").authenticated()
-                        .requestMatchers("/api/v1/queues/providers/*/members").authenticated()
-                        .requestMatchers("/api/v1/queues/providers/self/**").authenticated()
+                        // State-changing queue endpoints must be authenticated (they dereference the
+                        // caller's principal). Public queue reads (status) remain permitted below.
+                        .requestMatchers(
+                                "/api/v1/queues/providers/*/members",
+                                "/api/v1/queues/providers/*/join",
+                                "/api/v1/queues/providers/*/leave",
+                                "/api/v1/queues/providers/*/my-position",
+                                "/api/v1/queues/providers/self/**",
+                                "/api/v1/queues/my/**"
+                        ).authenticated()
+                        // Authenticated provider actions that live under the otherwise-public
+                        // /providers/** tree.
+                        .requestMatchers(
+                                "/api/v1/providers/*/ratings",
+                                "/api/v1/providers/*/favorite",
+                                "/api/v1/providers/favorites",
+                                "/api/v1/providers/*/appointments"
+                        ).authenticated()
                         .requestMatchers(
                                 "/api/v1/auth/**",
                                 "/api/v1/providers/**",
+                                "/api/v1/stripe/webhook",
+                                // STOMP/SockJS handshake endpoint (also exposes /ws/websocket for clients).
+                                "/ws",
+                                "/ws/**",
                                 "/.well-known/**",
                                 "/actuator/health/**",
                                 "/actuator/info",
@@ -75,11 +99,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(apiKeyAuthenticationFilter, JwtAuthenticationFilter.class)
-                .logout(logout -> logout
-                        .logoutUrl("/api/v1/auth/logout")
-                        .addLogoutHandler(jwtLogoutHandler)
-                );
+                .addFilterBefore(apiKeyAuthenticationFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

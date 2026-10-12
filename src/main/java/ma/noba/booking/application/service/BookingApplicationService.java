@@ -8,6 +8,7 @@ import ma.noba.booking.domain.model.AvailabilitySlot;
 import ma.noba.booking.domain.port.AppointmentRepository;
 import ma.noba.booking.domain.port.AvailabilitySlotRepository;
 import ma.noba.payment.domain.port.ProviderLookupPort;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -93,7 +94,7 @@ public class BookingApplicationService {
             .orElseThrow(() -> new IllegalArgumentException("Appointment not found: " + appointmentId));
 
         if (!appointment.getUserId().equals(userId)) {
-            throw new SecurityException("Not authorized to cancel this appointment");
+            throw new AccessDeniedException("Not authorized to cancel this appointment");
         }
 
         appointment.cancel();
@@ -101,27 +102,40 @@ public class BookingApplicationService {
     }
 
     @Transactional
-    public void confirmAppointment(UUID appointmentId) {
-        Appointment appointment = appointmentRepository.findById(appointmentId)
-            .orElseThrow(() -> new IllegalArgumentException("Appointment not found: " + appointmentId));
+    public void confirmAppointment(UUID appointmentId, UUID userId) {
+        Appointment appointment = findAppointment(appointmentId);
+        requireProviderOwns(appointment.getProviderId(), userId);
         appointment.confirm();
         appointmentRepository.save(appointment);
     }
 
     @Transactional
-    public void completeAppointment(UUID appointmentId) {
-        Appointment appointment = appointmentRepository.findById(appointmentId)
-            .orElseThrow(() -> new IllegalArgumentException("Appointment not found: " + appointmentId));
+    public void completeAppointment(UUID appointmentId, UUID userId) {
+        Appointment appointment = findAppointment(appointmentId);
+        requireProviderOwns(appointment.getProviderId(), userId);
         appointment.complete();
         appointmentRepository.save(appointment);
     }
 
     @Transactional
-    public void markNoShow(UUID appointmentId) {
-        Appointment appointment = appointmentRepository.findById(appointmentId)
-            .orElseThrow(() -> new IllegalArgumentException("Appointment not found: " + appointmentId));
+    public void markNoShow(UUID appointmentId, UUID userId) {
+        Appointment appointment = findAppointment(appointmentId);
+        requireProviderOwns(appointment.getProviderId(), userId);
         appointment.markNoShow();
         appointmentRepository.save(appointment);
+    }
+
+    private Appointment findAppointment(UUID appointmentId) {
+        return appointmentRepository.findById(appointmentId)
+            .orElseThrow(() -> new IllegalArgumentException("Appointment not found: " + appointmentId));
+    }
+
+    /** Ensures the caller is the provider that owns the given resource. */
+    private void requireProviderOwns(UUID resourceProviderId, UUID userId) {
+        UUID callerProviderId = providerLookupPort.findProviderIdByUserId(userId).orElse(null);
+        if (callerProviderId == null || !callerProviderId.equals(resourceProviderId)) {
+            throw new AccessDeniedException("Not the provider of this resource");
+        }
     }
 
     public List<Appointment> getUserAppointments(UUID userId) {
@@ -166,9 +180,10 @@ public class BookingApplicationService {
     }
 
     @Transactional
-    public void removeAvailabilitySlot(UUID slotId) {
+    public void removeAvailabilitySlot(UUID slotId, UUID userId) {
         AvailabilitySlot slot = availabilitySlotRepository.findById(slotId)
             .orElseThrow(() -> new IllegalArgumentException("Availability slot not found: " + slotId));
+        requireProviderOwns(slot.getProviderId(), userId);
         slot.deactivate();
         availabilitySlotRepository.save(slot);
     }

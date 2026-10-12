@@ -49,12 +49,20 @@ public class ProviderDiscoveryController {
         return ResponseEntity.ok(providerService.getCustomerFavorites(user.id()));
     }
 
-    @Operation(summary = "Search providers by category (paginated)")
+    @Operation(summary = "Search providers by free text and/or category (paginated)")
     @GetMapping("/search")
-    public ResponseEntity<PagedResponse<ProviderResponse>> searchByCategory(
-            @RequestParam String category,
+    public ResponseEntity<PagedResponse<ProviderResponse>> search(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String q,
             Pageable pageable) {
-        return ResponseEntity.ok(providerService.searchByCategory(category, pageable));
+        // Free-text search takes precedence; otherwise fall back to category; otherwise all active.
+        if (q != null && !q.isBlank()) {
+            return ResponseEntity.ok(providerService.searchByText(q.trim(), pageable));
+        }
+        if (category != null && !category.isBlank()) {
+            return ResponseEntity.ok(providerService.searchByCategory(category, pageable));
+        }
+        return ResponseEntity.ok(providerService.getAllActive(pageable));
     }
 
     @GetMapping("/nearby")

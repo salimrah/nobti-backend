@@ -8,6 +8,7 @@ import java.time.Instant;
 public record QueueMemberResponse(
         String id,
         String clientId,
+        String clientName,
         String serviceId,
         String employeeId,
         int position,
@@ -18,5 +19,7 @@ public record QueueMemberResponse(
         double actualDurationMinutes,
         int estimatedWaitMinutes,
         String groupId,
-        int groupSize
+        int groupSize,
+        String providerId,
+        int queueSize
 ) {}

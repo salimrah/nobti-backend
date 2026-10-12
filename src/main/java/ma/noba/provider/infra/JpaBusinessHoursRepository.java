@@ -3,6 +3,9 @@ package ma.noba.provider.infra;
 import ma.noba.provider.domain.model.BusinessHours;
 import ma.noba.provider.domain.port.service.BusinessHoursRepository;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,5 +22,13 @@ public interface JpaBusinessHoursRepository extends JpaRepository<BusinessHours,
 
     Optional<BusinessHours> findByProviderIdAndDayOfWeek(UUID providerId, int dayOfWeek);
 
-    void deleteByProviderId(UUID providerId);
+    /**
+     * Bulk delete executed immediately. A Spring Data derived delete would only be applied at
+     * flush time, and Hibernate flushes inserts before deletes, so re-saving business hours for a
+     * provider that already had rows violated {@code uq_business_hours_provider_day}.
+     */
+    @Override
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM BusinessHours b WHERE b.providerId = :providerId")
+    void deleteByProviderId(@Param("providerId") UUID providerId);
 }

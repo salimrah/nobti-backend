@@ -99,6 +99,12 @@ public class ProviderApplicationService {
                     log.warn("Provider not found: {}", providerId);
                     return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found");
                 });
+        // Public discovery must not expose providers that are not yet approved (PENDING/REJECTED/
+        // INACTIVE) or their coordinates. The owner uses /providers/self instead.
+        if (!provider.isActive()) {
+            log.debug("Hiding non-active provider {} from public discovery", providerId);
+            throw new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found");
+        }
         return toResponse(provider);
     }
 
@@ -213,6 +219,11 @@ public class ProviderApplicationService {
     @Transactional(readOnly = true)
     public PagedResponse<ProviderResponse> searchByCategory(String category, Pageable pageable) {
         return toPagedResponse(providerRepository.findByCategory(category, pageable));
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<ProviderResponse> searchByText(String query, Pageable pageable) {
+        return toPagedResponse(providerRepository.searchActive(query, pageable));
     }
 
     @Transactional(readOnly = true)

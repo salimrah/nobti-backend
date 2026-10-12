@@ -73,7 +73,7 @@ jobs:
 
       - name: Run Integration Tests (Docker)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: ./mvnw test -Dgroups="docker"
+        run: ./mvnw test -Dgroups=docker -DexcludedGroups=
         env:
           TESTCONTAINERS_RYUK_DISABLED: "true"
 

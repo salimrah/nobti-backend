@@ -24,6 +24,7 @@ import com.nimbusds.jose.crypto.RSASSAVerifier;
 
 import java.io.IOException;
 import java.text.ParseException;
+import java.util.Date;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -76,6 +77,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
             var claims = signedJWT.getJWTClaimsSet();
+
+            // Reject expired tokens: signature verification alone does not validate `exp`.
+            Date expiration = claims.getExpirationTime();
+            if (expiration == null || expiration.toInstant().isBefore(java.time.Instant.now())) {
+                SecurityContextHolder.clearContext();
+                filterChain.doFilter(request, response);
+                return;
+            }
+
             String userId = claims.getSubject();
             if (userId == null) {
                 filterChain.doFilter(request, response);
@@ -108,7 +118,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     new UserPrincipal(uid, null, null, roles),
                     null, authorities);
             SecurityContextHolder.getContext().setAuthentication(auth);
-        } catch (ParseException e) {
+        } catch (ParseException | IllegalArgumentException e) {
             SecurityContextHolder.clearContext();
         }
 

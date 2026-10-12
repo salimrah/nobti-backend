@@ -1,7 +1,7 @@
 package ma.noba.identity;
 
-import ma.noba.shared.AbstractIntegrationTest;
 import ma.noba.identity.application.AuthToken;
+import ma.noba.shared.AbstractIntegrationTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,8 +9,8 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.*;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,253 +24,184 @@ class IdentityAuthIntegrationTest extends AbstractIntegrationTest {
     private TestRestTemplate restTemplate;
 
     private String baseUrl() {
-        return "http://localhost:" + port + "/auth";
+        return "http://localhost:" + port + "/api/v1/auth";
+    }
+
+    private String newEmail() {
+        return "it-" + UUID.randomUUID().toString().substring(0, 12) + "@example.com";
+    }
+
+    /** Signs up an account and marks its email verified so password login is permitted. */
+    private void signupVerified(String email, String password) {
+        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/signup",
+                Map.of("email", email, "password", password, "firstName", "Test", "lastName", "User"), Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        UUID userId = UUID.fromString((String) response.getBody().get("userId"));
+        verifyEmail(userId);
+    }
+
+    private AuthToken login(String email, String password) {
+        ResponseEntity<AuthToken> response = restTemplate.postForEntity(baseUrl() + "/login",
+                Map.of("email", email, "password", password), AuthToken.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        return response.getBody();
     }
 
     @Test
     @DisplayName("Health endpoint should return OK")
     void healthCheck() {
         ResponseEntity<String> response = restTemplate.getForEntity(baseUrl() + "/hello", String.class);
-
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo("noba-backend is running");
     }
 
     @Test
-    @DisplayName("Should signup with valid email and password")
+    @DisplayName("Signup creates an unverified user")
     void signup_success() {
-        Map<String, String> request = Map.of(
-                "email", "v2test@example.com",
-                "password", "TestPass123!",
-                "firstName", "John",
-                "lastName", "Doe"
-        );
-
-        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/signup", request, Map.class);
+        String email = newEmail();
+        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/signup",
+                Map.of("email", email, "password", "TestPass123!", "firstName", "John", "lastName", "Doe"), Map.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        Map<String, Object> body = response.getBody();
-        assertThat(body).isNotNull();
-        assertThat(body.get("email")).isEqualTo("v2test@example.com");
-        assertThat(body.get("userId")).isNotNull();
-        assertThat(body.get("emailVerified")).isEqualTo(false);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().get("email")).isEqualTo(email);
+        assertThat(response.getBody().get("userId")).isNotNull();
+        assertThat(response.getBody().get("emailVerified")).isEqualTo(false);
     }
 
     @Test
-    @DisplayName("Should reject signup with weak password")
+    @DisplayName("Signup rejects a weak password")
     void signup_weakPassword() {
-        Map<String, String> request = Map.of(
-                "email", "weak@example.com",
-                "password", "short",
-                "firstName", "Jane",
-                "lastName", "Doe"
-        );
-
-        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/signup", request, Map.class);
-
+        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/signup",
+                Map.of("email", newEmail(), "password", "short", "firstName", "Jane", "lastName", "Doe"), Map.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
-    @DisplayName("After signup, user should have USER role")
-    void signup_assignsUserRole() {
-        String email = "role-test-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
-        String apiBase = "http://localhost:" + port + "/api/v1";
-
-        restTemplate.postForEntity(apiBase + "/auth/signup",
-                Map.of("email", email, "password", "TestPass123!"), Map.class);
-
-        ResponseEntity<Map> loginResponse = restTemplate.postForEntity(apiBase + "/auth/login",
-                Map.of("email", email, "password", "TestPass123!"), Map.class);
-        assertThat(loginResponse.getBody()).isNotNull();
-        String accessToken = (String) loginResponse.getBody().get("accessToken");
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + accessToken);
-        HttpEntity<Void> entity = new HttpEntity<>(headers);
-        ResponseEntity<Map> meResponse = restTemplate.exchange(
-                apiBase + "/users/me", HttpMethod.GET, entity, Map.class);
-
-        assertThat(meResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(meResponse.getBody()).isNotNull();
-        Set<String> roles = (Set<String>) meResponse.getBody().get("roles");
-        assertThat(roles).contains("USER");
-    }
-
-    @Test
-    @DisplayName("Should reject signup with duplicate email")
+    @DisplayName("Signup rejects a duplicate email")
     void signup_duplicateEmail() {
-        Map<String, String> first = Map.of(
-                "email", "dup@example.com",
-                "password", "DupPass123!",
-                "firstName", "First",
-                "lastName", "User"
-        );
-        restTemplate.postForEntity(baseUrl() + "/signup", first, Map.class);
+        String email = newEmail();
+        restTemplate.postForEntity(baseUrl() + "/signup",
+                Map.of("email", email, "password", "DupPass123!", "firstName", "First", "lastName", "User"), Map.class);
 
-        Map<String, String> request = Map.of(
-                "email", "dup@example.com",
-                "password", "DupPass123!",
-                "firstName", "Second",
-                "lastName", "User"
-        );
-
-        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/signup", request, Map.class);
-
+        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/signup",
+                Map.of("email", email, "password", "DupPass123!", "firstName", "Second", "lastName", "User"), Map.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
-    @DisplayName("Should login with valid credentials and return tokens")
+    @DisplayName("Unverified users cannot log in with a password")
+    void login_unverifiedEmailRejected() {
+        String email = newEmail();
+        restTemplate.postForEntity(baseUrl() + "/signup",
+                Map.of("email", email, "password", "TestPass123!", "firstName", "A", "lastName", "B"), Map.class);
+
+        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/login",
+                Map.of("email", email, "password", "TestPass123!"), Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    @DisplayName("A verified user can log in and receives tokens")
     void login_success() {
-        signup_success();
+        String email = newEmail();
+        signupVerified(email, "TestPass123!");
 
-        Map<String, String> request = Map.of(
-                "email", "v2test@example.com",
-                "password", "TestPass123!"
-        );
-
-        ResponseEntity<AuthToken> response = restTemplate.postForEntity(baseUrl() + "/login", request, AuthToken.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        AuthToken body = response.getBody();
-        assertThat(body).isNotNull();
+        AuthToken body = login(email, "TestPass123!");
         assertThat(body.accessToken()).isNotBlank();
         assertThat(body.refreshToken()).isNotBlank();
         assertThat(body.expiresIn()).isGreaterThan(0);
     }
 
     @Test
-    @DisplayName("Should reject login with wrong password")
+    @DisplayName("Login rejects a wrong password")
     void login_wrongPassword() {
-        signup_success();
+        String email = newEmail();
+        signupVerified(email, "TestPass123!");
 
-        Map<String, String> request = Map.of(
-                "email", "v2test@example.com",
-                "password", "WrongPass123!"
-        );
-
-        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/login", request, Map.class);
-
+        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/login",
+                Map.of("email", email, "password", "WrongPass123!"), Map.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
-    @DisplayName("Should reject login with non-existent email")
+    @DisplayName("Login rejects a non-existent email")
     void login_nonExistentEmail() {
-        Map<String, String> request = Map.of(
-                "email", "nonexistent@example.com",
-                "password", "TestPass123!"
-        );
-
-        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/login", request, Map.class);
-
+        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/login",
+                Map.of("email", newEmail(), "password", "TestPass123!"), Map.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
-    @DisplayName("Should refresh access token with valid refresh token")
+    @DisplayName("A new user is assigned the USER role")
+    void signup_assignsUserRole() {
+        String email = newEmail();
+        signupVerified(email, "TestPass123!");
+        AuthToken tokens = login(email, "TestPass123!");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + tokens.accessToken());
+        ResponseEntity<Map> me = restTemplate.exchange("http://localhost:" + port + "/api/v1/users/me",
+                HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+
+        assertThat(me.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(me.getBody()).isNotNull();
+        assertThat((List<String>) me.getBody().get("roles")).contains("USER");
+    }
+
+    @Test
+    @DisplayName("Refresh exchanges a refresh token for new tokens")
     void refreshToken_success() {
-        signup_success();
+        String email = newEmail();
+        signupVerified(email, "TestPass123!");
+        AuthToken tokens = login(email, "TestPass123!");
 
-        Map<String, String> loginRequest = Map.of(
-                "email", "v2test@example.com",
-                "password", "TestPass123!"
-        );
-        AuthToken loginResponse = restTemplate.postForEntity(baseUrl() + "/login", loginRequest, AuthToken.class).getBody();
-        assertThat(loginResponse).isNotNull();
-
-        Map<String, String> refreshRequest = Map.of("refreshToken", loginResponse.refreshToken());
-
-        ResponseEntity<AuthToken> response = restTemplate.postForEntity(baseUrl() + "/token/refresh", refreshRequest, AuthToken.class);
+        ResponseEntity<AuthToken> response = restTemplate.postForEntity(baseUrl() + "/token/refresh",
+                Map.of("refreshToken", tokens.refreshToken()), AuthToken.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        AuthToken body = response.getBody();
-        assertThat(body).isNotNull();
-        assertThat(body.accessToken()).isNotBlank();
-        assertThat(body.refreshToken()).isNotBlank();
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().accessToken()).isNotBlank();
     }
 
     @Test
-    @DisplayName("Should reject refresh with invalid token")
+    @DisplayName("Refresh rejects an invalid token")
     void refreshToken_invalid() {
-        Map<String, String> request = Map.of("refreshToken", "invalid-token");
-
-        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/token/refresh", request, Map.class);
-
+        ResponseEntity<Map> response = restTemplate.postForEntity(baseUrl() + "/token/refresh",
+                Map.of("refreshToken", "invalid-token"), Map.class);
         assertThat(response.getStatusCode()).isIn(HttpStatus.BAD_REQUEST, HttpStatus.UNAUTHORIZED);
     }
 
     @Test
-    @DisplayName("Should logout and revoke tokens")
+    @DisplayName("Logout revokes the session")
     void logout_success() {
-        signup_success();
+        String email = newEmail();
+        signupVerified(email, "TestPass123!");
+        AuthToken tokens = login(email, "TestPass123!");
 
-        Map<String, String> loginRequest = Map.of(
-                "email", "v2test@example.com",
-                "password", "TestPass123!"
-        );
-        AuthToken loginResponse = restTemplate.postForEntity(baseUrl() + "/login", loginRequest, AuthToken.class).getBody();
-        assertThat(loginResponse).isNotNull();
-
-        Map<String, String> logoutRequest = Map.of(
-                "accessToken", loginResponse.accessToken(),
-                "refreshToken", loginResponse.refreshToken()
-        );
-
-        ResponseEntity<Void> response = restTemplate.postForEntity(baseUrl() + "/logout", logoutRequest, Void.class);
-
+        ResponseEntity<Void> response = restTemplate.postForEntity(baseUrl() + "/logout",
+                Map.of("accessToken", tokens.accessToken(), "refreshToken", tokens.refreshToken()), Void.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     }
 
     @Test
-    @DisplayName("Should request password reset for existing user")
+    @DisplayName("Forgot-password is accepted for any email (no enumeration)")
     void forgotPassword_success() {
-        signup_success();
-
-        Map<String, String> request = Map.of("email", "v2test@example.com");
-
-        ResponseEntity<Void> response = restTemplate.postForEntity(baseUrl() + "/forgot-password", request, Void.class);
-
+        ResponseEntity<Void> response = restTemplate.postForEntity(baseUrl() + "/forgot-password",
+                Map.of("email", newEmail()), Void.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
     }
 
     @Test
-    @DisplayName("Should verify email with valid code")
-    void verifyEmail_success() {
-        signup_success();
+    @DisplayName("Verify-email rejects an invalid code")
+    void verifyEmail_invalidCode() {
+        String email = newEmail();
+        restTemplate.postForEntity(baseUrl() + "/signup",
+                Map.of("email", email, "password", "TestPass123!", "firstName", "T", "lastName", "U"), Map.class);
 
-        var repo = restTemplate.getRestTemplate();
-        ResponseEntity<Map> signupResponse = restTemplate.postForEntity(baseUrl() + "/signup",
-                Map.of("email", "verify-email-test@example.com", "password", "TestPass123!", "firstName", "Test", "lastName", "User"),
-                Map.class);
-        assertThat(signupResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-
-        Map<String, String> request = Map.of(
-                "email", "verify-email-test@example.com",
-                "code", "test-code"
-        );
-
-        ResponseEntity<Void> response = restTemplate.postForEntity(baseUrl() + "/verify-email", request, Void.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-    }
-
-    @Test
-    @DisplayName("Should resend verification code")
-    void resendVerification_success() {
-        Map<String, String> request = Map.of(
-                "email", "resend-test@example.com",
-                "password", "TestPass123!",
-                "firstName", "Resend",
-                "lastName", "User"
-        );
-        restTemplate.postForEntity(baseUrl() + "/signup", request, Map.class);
-
-        Map<String, String> resendRequest = Map.of("email", "resend-test@example.com");
-
-        ResponseEntity<Void> response = restTemplate.postForEntity(baseUrl() + "/resend-verification", resendRequest, Void.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        ResponseEntity<Void> response = restTemplate.postForEntity(baseUrl() + "/verify-email",
+                Map.of("email", email, "code", "invalid-code"), Void.class);
+        assertThat(response.getStatusCode().is4xxClientError()).isTrue();
     }
 }

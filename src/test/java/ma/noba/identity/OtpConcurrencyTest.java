@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import ma.noba.identity.domain.model.OtpChannel;
 import ma.noba.identity.domain.model.OtpChallenge;
 import ma.noba.identity.domain.model.OtpChallengeStatus;
+import ma.noba.identity.domain.exception.AttemptsExhaustedException;
 import ma.noba.identity.domain.model.OtpConfig;
 import ma.noba.identity.domain.repository.OtpChallengeRepository;
 import ma.noba.identity.domain.service.*;
@@ -22,6 +23,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -56,8 +58,8 @@ class OtpConcurrencyTest {
     }
 
     @Test
-    @DisplayName("Concurrent verify calls can exceed maxAttempts due to race condition")
-    void concurrentVerify_raceCondition() throws Exception {
+    @DisplayName("Concurrent verify calls cannot exceed maxAttempts")
+    void concurrentVerify_doesNotExceedMaxAttempts() throws Exception {
         OtpChallenge challenge = OtpChallenge.builder()
                 .id(CHALLENGE_ID)
                 .target("+212600000000")
@@ -72,11 +74,15 @@ class OtpConcurrencyTest {
         when(repository.find(CHALLENGE_ID)).thenReturn(Optional.of(challenge));
         when(rateLimiter.tryConsume(any(), anyLong())).thenReturn(true);
         when(otpEncoder.matches(any(), any())).thenReturn(false);
+        AtomicInteger attempts = new AtomicInteger();
+        when(repository.incrementAttempts(eq(CHALLENGE_ID), any())).thenAnswer(i -> attempts.incrementAndGet());
 
-        int threadCount = 5;
+        int threadCount = 10;
         CountDownLatch readyLatch = new CountDownLatch(threadCount);
         CountDownLatch startLatch = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        AtomicInteger invalid = new AtomicInteger();
+        AtomicInteger exhausted = new AtomicInteger();
 
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
@@ -84,7 +90,11 @@ class OtpConcurrencyTest {
                 try { startLatch.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                 try {
                     otpService.verify(CHALLENGE_ID, "wrong-code");
-                } catch (Exception ignored) {}
+                } catch (AttemptsExhaustedException e) {
+                    exhausted.incrementAndGet();
+                } catch (Exception e) {
+                    invalid.incrementAndGet();
+                }
             });
         }
 
@@ -93,7 +103,10 @@ class OtpConcurrencyTest {
         executor.shutdown();
         executor.awaitTermination(5, TimeUnit.SECONDS);
 
-        assertThat(challenge.getAttempts()).isGreaterThanOrEqualTo(MAX_ATTEMPTS);
+        // The atomic counter caps evaluated guesses at maxAttempts; the rest are rejected.
+        assertThat(invalid.get()).isLessThanOrEqualTo(MAX_ATTEMPTS);
+        assertThat(exhausted.get()).isGreaterThan(0);
+        assertThat(invalid.get() + exhausted.get()).isEqualTo(threadCount);
     }
 
     @Test

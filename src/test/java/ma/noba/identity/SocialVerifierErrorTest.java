@@ -105,7 +105,7 @@ class SocialVerifierErrorTest {
         SocialProviderVerifier mockVerifier = org.mockito.Mockito.mock(SocialProviderVerifier.class);
         when(mockVerifier.supports(SocialProvider.GOOGLE)).thenReturn(true);
         when(mockVerifier.verify("valid-token")).thenReturn(
-                new SocialProfile("sub-123", "user@test.com", "Test User"));
+                new SocialProfile("sub-123", "user@test.com", "Test User", true));
 
         var verifier = new SocialVerifierService(List.of(mockVerifier));
         SocialProfile result = verifier.verify(SocialProvider.GOOGLE, "valid-token");

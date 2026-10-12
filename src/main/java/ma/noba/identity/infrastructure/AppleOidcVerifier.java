@@ -55,10 +55,12 @@ public class AppleOidcVerifier implements SocialProviderVerifier {
             }
 
             // Apple may use "email" and "sub" for subject
+            boolean emailVerified = Boolean.TRUE.equals(claims.getClaim("email_verified"));
             return new SocialProfile(
                     claims.getSubject(),
                     claims.getStringClaim("email"),
-                    claims.getStringClaim("name") // optional, may be null
+                    claims.getStringClaim("name"), // optional, may be null
+                    emailVerified
             );
 
         } catch (InvalidTokenException e) {

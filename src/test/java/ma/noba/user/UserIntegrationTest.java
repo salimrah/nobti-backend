@@ -50,6 +50,7 @@ class UserIntegrationTest extends AbstractIntegrationTest {
         SignupRequest signupRequest = new SignupRequest(email, "UserTest123!", "User", "Tester");
         ResponseEntity<Map> signupResponse = restTemplate.postForEntity(baseUrl() + "/auth/signup", signupRequest, Map.class);
         this.userId = UUID.fromString((String) signupResponse.getBody().get("userId"));
+        verifyEmail(this.userId);
 
         PasswordAuthRequest loginRequest = new PasswordAuthRequest(email, "UserTest123!", null);
         ResponseEntity<Map> loginResponse = restTemplate.postForEntity(baseUrl() + "/auth/login", loginRequest, Map.class);
@@ -72,7 +73,7 @@ class UserIntegrationTest extends AbstractIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         UserResponse body = response.getBody();
         assertThat(body).isNotNull();
-        assertThat(body.id()).isEqualTo(userId);
+        assertThat(body.id()).isEqualTo(userId.toString());
         assertThat(body.email()).startsWith("user-test-");
     }
 
@@ -146,6 +147,6 @@ class UserIntegrationTest extends AbstractIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         UserResponse body = response.getBody();
         assertThat(body).isNotNull();
-        assertThat(body.id()).isEqualTo(userId);
+        assertThat(body.id()).isEqualTo(userId.toString());
     }
 }

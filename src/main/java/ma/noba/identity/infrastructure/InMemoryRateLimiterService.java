@@ -25,12 +25,13 @@ public class InMemoryRateLimiterService implements RateLimiterService {
     public boolean tryConsume(String key, long tokens) {
         long now = System.currentTimeMillis();
         long windowMs = windowMinutes * 60_000;
+        // Always record the consumption, then compare. (The previous version kept the old count when
+        // over the limit, so `count <= maxRequests` was always true — a no-op limiter.)
         return windows.compute(key, (k, w) -> {
             if (w == null || now - w.start > windowMs) {
                 return new Window(now, tokens);
             }
-            long next = w.count + tokens;
-            return next <= maxRequests ? new Window(w.start, next) : w;
+            return new Window(w.start, w.count + tokens);
         }).count <= maxRequests;
     }
 

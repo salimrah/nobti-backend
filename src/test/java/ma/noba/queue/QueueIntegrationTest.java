@@ -16,6 +16,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -52,7 +53,9 @@ class QueueIntegrationTest extends AbstractIntegrationTest {
     private void signupAndLogin() {
         String email = "queue-test-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
         SignupRequest signupRequest = new SignupRequest(email, "QueueTest123!", "Queue", "Tester");
-        restTemplate.postForEntity(baseUrl() + "/auth/signup", signupRequest, Map.class);
+        ResponseEntity<Map> signupResponse = restTemplate.postForEntity(baseUrl() + "/auth/signup", signupRequest, Map.class);
+        assertThat(signupResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        verifyEmail(UUID.fromString((String) signupResponse.getBody().get("userId")));
 
         PasswordAuthRequest loginRequest = new PasswordAuthRequest(email, "QueueTest123!", null);
         ResponseEntity<Map> loginResponse = restTemplate.postForEntity(baseUrl() + "/auth/login", loginRequest, Map.class);
@@ -76,11 +79,29 @@ class QueueIntegrationTest extends AbstractIntegrationTest {
         ResponseEntity<ProviderResponse> response = restTemplate.postForEntity(baseUrl() + "/providers/self", entity, ProviderResponse.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         this.providerId = response.getBody().id();
+        setBusinessHours();
+    }
+
+    /** The queue can only be joined while the provider is open, so open all week. */
+    private void setBusinessHours() {
+        List<Map<String, Object>> days = new ArrayList<>();
+        for (int day = 1; day <= 7; day++) {
+            days.add(Map.of("dayOfWeek", day, "opensAt", "00:00", "closesAt", "23:59", "closed", false));
+        }
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(Map.of("days", days), authHeaders());
+        ResponseEntity<Void> response = restTemplate.exchange(
+                baseUrl() + "/providers/self/hours", HttpMethod.PUT, entity, Void.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     @Test
     @DisplayName("Should get queue status for a provider")
     void getQueueStatus() {
+        // A queue only exists after the first member joins.
+        restTemplate.postForEntity(
+                baseUrl() + "/queues/providers/" + providerId + "/join",
+                new HttpEntity<>(authHeaders()), JoinQueueResponse.class);
+
         ResponseEntity<QueueStatusResponse> response = restTemplate.getForEntity(
                 baseUrl() + "/queues/providers/" + providerId + "/status",
                 QueueStatusResponse.class
@@ -115,8 +136,10 @@ class QueueIntegrationTest extends AbstractIntegrationTest {
         HttpEntity<Void> entity = new HttpEntity<>(authHeaders());
         restTemplate.postForEntity(baseUrl() + "/queues/providers/" + providerId + "/join", entity, JoinQueueResponse.class);
 
-        ResponseEntity<Map> response = restTemplate.getForEntity(
+        ResponseEntity<Map> response = restTemplate.exchange(
                 baseUrl() + "/queues/providers/" + providerId + "/members",
+                HttpMethod.GET,
+                new HttpEntity<>(authHeaders()),
                 Map.class
         );
 
@@ -159,9 +182,26 @@ class QueueIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("Marking a member as no-show removes them")
+    void markNoShow_success() {
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders());
+        JoinQueueResponse join = restTemplate.postForEntity(
+                baseUrl() + "/queues/providers/" + providerId + "/join", entity, JoinQueueResponse.class).getBody();
+        assertThat(join).isNotNull();
+
+        ResponseEntity<Void> response = restTemplate.postForEntity(
+                baseUrl() + "/queues/providers/self/members/" + join.memberId() + "/no-show",
+                entity, Void.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
     @DisplayName("Should pause queue as provider")
     void pauseQueue() {
         HttpEntity<Void> entity = new HttpEntity<>(authHeaders());
+        // A queue must exist before it can be paused.
+        restTemplate.postForEntity(baseUrl() + "/queues/providers/" + providerId + "/join", entity, JoinQueueResponse.class);
 
         ResponseEntity<Void> response = restTemplate.postForEntity(
                 baseUrl() + "/queues/providers/self/pause",
@@ -176,7 +216,7 @@ class QueueIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("Should resume queue after pause")
     void resumeQueue() {
         HttpEntity<Void> entity = new HttpEntity<>(authHeaders());
-
+        restTemplate.postForEntity(baseUrl() + "/queues/providers/" + providerId + "/join", entity, JoinQueueResponse.class);
         restTemplate.postForEntity(baseUrl() + "/queues/providers/self/pause", entity, Void.class);
 
         ResponseEntity<Void> response = restTemplate.postForEntity(

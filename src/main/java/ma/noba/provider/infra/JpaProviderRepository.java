@@ -37,6 +37,21 @@ public interface JpaProviderRepository extends JpaRepository<Provider, UUID>, Pr
     @Query("SELECT p FROM Provider p WHERE p.status = 'ACTIVE'")
     Page<Provider> findByActiveOnlyPage(Pageable pageable);
 
+    @EntityGraph(attributePaths = {"services"})
+    Page<Provider> findByNameContainingIgnoreCaseAndStatus(String name, ProviderStatus status, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"services"})
+    Page<Provider> findByDescriptionContainingIgnoreCaseAndStatus(String description, ProviderStatus status, Pageable pageable);
+
+    @Override
+    default Page<Provider> searchActive(String query, Pageable pageable) {
+        Page<Provider> byName = findByNameContainingIgnoreCaseAndStatus(query, ProviderStatus.ACTIVE, pageable);
+        if (byName.hasContent()) {
+            return byName;
+        }
+        return findByDescriptionContainingIgnoreCaseAndStatus(query, ProviderStatus.ACTIVE, pageable);
+    }
+
     @Query("SELECT p FROM Provider p WHERE p.status = :status ORDER BY p.createdAt DESC")
     List<Provider> findByStatusString(@Param("status") String status);
 
