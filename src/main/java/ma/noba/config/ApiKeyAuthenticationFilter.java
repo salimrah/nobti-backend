@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import ma.noba.shared.domain.model.ApiKey;
+import ma.noba.shared.domain.model.ApiKeyPermissions;
 import ma.noba.shared.domain.port.service.ApiKeyRepository;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.http.HttpStatus;
@@ -16,8 +17,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Component
 public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
@@ -65,8 +68,25 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
+        // Permissions are enforced (not merely carried): a read-only key cannot mutate state.
+        Set<String> permissions = ApiKeyPermissions.parse(apiKey.getPermissions());
+        boolean readSafe = ApiKeyPermissions.isReadSafe(request.getMethod());
+        boolean allowed = readSafe
+                ? ApiKeyPermissions.allowsRead(permissions)
+                : ApiKeyPermissions.allowsWrite(permissions);
+        if (!allowed) {
+            response.setStatus(HttpStatus.FORBIDDEN.value());
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\":\"API key does not permit this operation\"}");
+            return;
+        }
+
+        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_API"));
+        permissions.forEach(p -> authorities.add(new SimpleGrantedAuthority("SCOPE_" + p)));
+
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                apiKey.getOwner(), null, List.of(new SimpleGrantedAuthority("ROLE_API"))
+                apiKey.getOwner(), null, authorities
         );
 
         SecurityContextHolder.getContext().setAuthentication(authentication);

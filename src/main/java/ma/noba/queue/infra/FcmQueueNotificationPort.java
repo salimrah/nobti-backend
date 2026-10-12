@@ -101,6 +101,40 @@ public class FcmQueueNotificationPort implements QueueNotificationPort {
         log.error("FCM estimated wait notification failed for client {} — circuit breaker fallback: {}", clientId, t.getMessage());
     }
 
+    @Override
+    @CircuitBreaker(name = ResilienceConfig.EXTERNAL_SERVICE, fallbackMethod = "notifyWaitlistOpenFallback")
+    @Retry(name = ResilienceConfig.EXTERNAL_SERVICE)
+    public void notifyWaitlistOpen(UUID clientId, UUID providerId) {
+        String token = getFcmToken(clientId);
+        if (token == null) {
+            log.warn("No FCM token found for client {}", clientId);
+            return;
+        }
+
+        try {
+            Message message = Message.builder()
+                    .setToken(token)
+                    .setNotification(Notification.builder()
+                            .setTitle("A spot just opened")
+                            .setBody("The queue is open — join now before it fills up.")
+                            .build())
+                    .putData("type", "waitlist_open")
+                    .putData("clientId", clientId.toString())
+                    .putData("providerId", providerId.toString())
+                    .build();
+
+            firebaseMessaging.send(message);
+            log.info("Waitlist open notification sent to client {}", clientId);
+        } catch (FirebaseMessagingException e) {
+            log.error("Failed to send waitlist notification to client {}", clientId, e);
+            handleMessagingError(token, e);
+        }
+    }
+
+    public void notifyWaitlistOpenFallback(UUID clientId, UUID providerId, Throwable t) {
+        log.error("FCM waitlist notification failed for client {} — circuit breaker fallback: {}", clientId, t.getMessage());
+    }
+
     private String getFcmToken(UUID clientId) {
         return fcmTokenQueryPort.findFcmTokenByUserId(clientId).orElse(null);
     }

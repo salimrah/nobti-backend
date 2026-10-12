@@ -7,9 +7,12 @@ import ma.noba.provider.application.dto.CreateProviderRequest;
 import ma.noba.provider.application.dto.DayHours;
 import ma.noba.provider.application.dto.ProviderResponse;
 import ma.noba.provider.application.dto.ProviderServiceResponse;
+import ma.noba.provider.application.dto.ProviderSettingsRequest;
+import ma.noba.provider.application.dto.ProviderSettingsResponse;
 import ma.noba.provider.application.dto.ServiceCategoryResponse;
 import ma.noba.provider.application.service.BusinessHoursService;
 import ma.noba.provider.application.service.ProviderApplicationService;
+import ma.noba.provider.application.service.ProviderSettingsService;
 import ma.noba.shared.domain.user.UserPrincipal;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -26,10 +29,12 @@ public class ProviderProfileController {
 
     private final ProviderApplicationService providerService;
     private final BusinessHoursService businessHoursService;
+    private final ProviderSettingsService providerSettingsService;
 
-    public ProviderProfileController(ProviderApplicationService providerService, BusinessHoursService businessHoursService) {
+    public ProviderProfileController(ProviderApplicationService providerService, BusinessHoursService businessHoursService, ProviderSettingsService providerSettingsService) {
         this.providerService = providerService;
         this.businessHoursService = businessHoursService;
+        this.providerSettingsService = providerSettingsService;
     }
 
     @PostMapping
@@ -107,5 +112,19 @@ public class ProviderProfileController {
             @AuthenticationPrincipal UserPrincipal user,
             @Valid @RequestBody AccessibilityRequest request) {
         return ResponseEntity.ok(providerService.updateAccessibility(user.id(), request));
+    }
+
+    @GetMapping("/settings")
+    public ResponseEntity<ProviderSettingsResponse> getSettings(@AuthenticationPrincipal UserPrincipal user) {
+        ProviderResponse provider = providerService.getMyProvider(user.id());
+        return ResponseEntity.ok(providerSettingsService.get(provider.id()));
+    }
+
+    @PutMapping("/settings")
+    public ResponseEntity<ProviderSettingsResponse> updateSettings(
+            @AuthenticationPrincipal UserPrincipal user,
+            @Valid @RequestBody ProviderSettingsRequest request) {
+        ProviderResponse provider = providerService.getMyProvider(user.id());
+        return ResponseEntity.ok(providerSettingsService.update(provider.id(), request));
     }
 }

@@ -25,4 +25,10 @@ public class LogQueueNotificationPort implements QueueNotificationPort {
         log.info("[MOCK] Estimated wait notification for client {} at provider {} ({} min)",
                 clientId, providerId, estimatedWaitMinutes);
     }
+
+    @Override
+    public void notifyWaitlistOpen(UUID clientId, UUID providerId) {
+        log.info("[MOCK] Waitlist open notification for client {} at provider {}",
+                clientId, providerId);
+    }
 }

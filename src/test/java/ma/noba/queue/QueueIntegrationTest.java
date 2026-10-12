@@ -243,4 +243,63 @@ class QueueIntegrationTest extends AbstractIntegrationTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
+
+    @Test
+    @DisplayName("Joining the waitlist records an entry visible to the client")
+    void waitlist_joinAndList() {
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders());
+
+        ResponseEntity<Map> join = restTemplate.postForEntity(
+                baseUrl() + "/queues/providers/" + providerId + "/waitlist", entity, Map.class);
+        assertThat(join.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        @SuppressWarnings("unchecked")
+        ResponseEntity<List> mine = restTemplate.exchange(
+                baseUrl() + "/queues/waitlist/me", HttpMethod.GET, entity, List.class);
+        assertThat(mine.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(mine.getBody()).hasSize(1);
+        assertThat(((Map) mine.getBody().get(0)).get("status")).isEqualTo("WAITING");
+    }
+
+    @Test
+    @DisplayName("Joining the waitlist twice is rejected")
+    void waitlist_duplicateRejected() {
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders());
+        restTemplate.postForEntity(baseUrl() + "/queues/providers/" + providerId + "/waitlist", entity, Map.class);
+
+        ResponseEntity<Map> second = restTemplate.postForEntity(
+                baseUrl() + "/queues/providers/" + providerId + "/waitlist", entity, Map.class);
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    @DisplayName("Provider sees their waitlist")
+    void providerWaitlist_listsEntries() {
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders());
+        restTemplate.postForEntity(baseUrl() + "/queues/providers/" + providerId + "/waitlist", entity, Map.class);
+
+        @SuppressWarnings("unchecked")
+        ResponseEntity<List> list = restTemplate.exchange(
+                baseUrl() + "/queues/providers/self/waitlist", HttpMethod.GET, entity, List.class);
+        assertThat(list.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(list.getBody()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Resuming a queue notifies waiting clients")
+    void resume_notifiesWaitlist() {
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders());
+        restTemplate.postForEntity(baseUrl() + "/queues/providers/" + providerId + "/waitlist", entity, Map.class);
+
+        // Resume both creates/keeps the queue open and notifies the waitlist.
+        ResponseEntity<Void> resume = restTemplate.postForEntity(
+                baseUrl() + "/queues/providers/self/resume", entity, Void.class);
+        assertThat(resume.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        @SuppressWarnings("unchecked")
+        ResponseEntity<List> mine = restTemplate.exchange(
+                baseUrl() + "/queues/waitlist/me", HttpMethod.GET, entity, List.class);
+        assertThat(mine.getBody()).hasSize(1);
+        assertThat(((Map) mine.getBody().get(0)).get("status")).isEqualTo("NOTIFIED");
+    }
 }

@@ -68,8 +68,10 @@ public class SecurityConfig {
                                 "/api/v1/queues/providers/*/join",
                                 "/api/v1/queues/providers/*/leave",
                                 "/api/v1/queues/providers/*/my-position",
+                                "/api/v1/queues/providers/*/waitlist",
                                 "/api/v1/queues/providers/self/**",
-                                "/api/v1/queues/my/**"
+                                "/api/v1/queues/my/**",
+                                "/api/v1/queues/waitlist/**"
                         ).authenticated()
                         // Authenticated provider actions that live under the otherwise-public
                         // /providers/** tree.
@@ -83,6 +85,11 @@ public class SecurityConfig {
                                 "/api/v1/auth/**",
                                 "/api/v1/providers/**",
                                 "/api/v1/stripe/webhook",
+                                // OpenAPI spec + Swagger UI (used to generate client types).
+                                "/v3/api-docs",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
                                 // STOMP/SockJS handshake endpoint (also exposes /ws/websocket for clients).
                                 "/ws",
                                 "/ws/**",

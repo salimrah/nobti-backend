@@ -58,4 +58,17 @@ class ApiContractTest extends AbstractIntegrationTest {
                 "/api/v1/queues/providers/00000000-0000-0000-0000-000000000000/status", String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
+
+    @Test
+    void openApiSpecIsPublicAndWellFormed() {
+        // The spec backs mobile client-type generation; it must be reachable without auth and
+        // include the newer modules (guards against a springdoc/Spring incompatibility regressing).
+        ResponseEntity<String> response = restTemplate.getForEntity("/v3/api-docs", String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .contains("\"openapi\"")
+                .contains("/api/v1/statement/me")
+                .contains("/api/v1/providers/self/settings")
+                .contains("/api/v1/queues/waitlist/me");
+    }
 }

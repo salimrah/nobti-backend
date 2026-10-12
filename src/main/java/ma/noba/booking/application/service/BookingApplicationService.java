@@ -7,7 +7,10 @@ import ma.noba.booking.domain.model.AppointmentStatus;
 import ma.noba.booking.domain.model.AvailabilitySlot;
 import ma.noba.booking.domain.port.AppointmentRepository;
 import ma.noba.booking.domain.port.AvailabilitySlotRepository;
+import ma.noba.booking.domain.port.service.ProviderBookingPolicyPort;
 import ma.noba.payment.domain.port.ProviderLookupPort;
+import ma.noba.shared.domain.exception.ErrorCode;
+import ma.noba.shared.domain.exception.ValidationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +25,7 @@ public class BookingApplicationService {
     private final AppointmentRepository appointmentRepository;
     private final AvailabilitySlotRepository availabilitySlotRepository;
     private final ProviderLookupPort providerLookupPort;
+    private final ProviderBookingPolicyPort bookingPolicy;
 
     public AvailableSlotsResponse getAvailableSlots(String providerId, LocalDate date) {
         UUID pid = UUID.fromString(providerId);
@@ -73,6 +77,10 @@ public class BookingApplicationService {
     public AppointmentResponse bookAppointment(UUID userId, CreateAppointmentRequest request) {
         UUID providerId = UUID.fromString(request.getProviderId());
 
+        if (!bookingPolicy.policy(providerId).appointmentsEnabled()) {
+            throw new ValidationException(ErrorCode.VALIDATION_ERROR, "Appointments are currently disabled for this provider");
+        }
+
         if (appointmentRepository.existsOverlapping(providerId, request.getStartTime(), request.getEndTime(), null)) {
             throw new IllegalStateException("Time slot is already booked");
         }
@@ -95,6 +103,12 @@ public class BookingApplicationService {
 
         if (!appointment.getUserId().equals(userId)) {
             throw new AccessDeniedException("Not authorized to cancel this appointment");
+        }
+
+        int windowMinutes = bookingPolicy.policy(appointment.getProviderId()).cancellationWindowMinutes();
+        if (windowMinutes > 0 && appointment.getStartTime() != null
+                && Instant.now().isAfter(appointment.getStartTime().minus(Duration.ofMinutes(windowMinutes)))) {
+            throw new ValidationException(ErrorCode.VALIDATION_ERROR, "The cancellation window for this appointment has passed");
         }
 
         appointment.cancel();

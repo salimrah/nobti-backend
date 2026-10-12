@@ -29,6 +29,8 @@ public interface JpaPaymentTransactionRepository extends JpaRepository<PaymentTr
 
     Page<PaymentTransaction> findByUserId(UUID userId, Pageable pageable);
 
+    List<PaymentTransaction> findByUserIdOrderByCreatedAtDesc(UUID userId);
+
     Page<PaymentTransaction> findByProviderId(UUID providerId, Pageable pageable);
 
     List<PaymentTransaction> findByProviderIdAndStatus(UUID providerId, PaymentStatus status);

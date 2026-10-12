@@ -3,6 +3,7 @@ package ma.noba.queue.application.service;
 import ma.noba.queue.application.dto.JoinQueueResponse;
 import ma.noba.queue.application.dto.QueueMemberResponse;
 import ma.noba.queue.application.dto.QueueStatusResponse;
+import ma.noba.queue.application.dto.WaitEstimate;
 import ma.noba.queue.domain.event.ClientJoinedQueueEvent;
 import ma.noba.queue.domain.event.ClientLeftQueueEvent;
 import ma.noba.queue.domain.event.ClientServiceCompletedEvent;
@@ -18,6 +19,7 @@ import ma.noba.queue.domain.port.service.QueueMemberRepository;
 import ma.noba.queue.domain.port.service.QueueNotificationPort;
 import ma.noba.queue.domain.port.service.QueueRepository;
 import ma.noba.queue.domain.port.service.QueueSchedulingPort;
+import ma.noba.queue.domain.port.service.ProviderQueuePolicyPort;
 import ma.noba.queue.domain.port.service.ServiceDurationEstimator;
 import ma.noba.shared.domain.event.EventBus;
 import ma.noba.shared.application.dto.PagedResponse;
@@ -50,9 +52,11 @@ public class QueueApplicationService {
     private final QueueNotificationPort notificationPort;
     private final EventBus eventBus;
     private final BusinessHoursPort businessHoursPort;
+    private final ProviderQueuePolicyPort queuePolicy;
     private final QueueSchedulingPort queueSchedulingPort;
     private final ClientDisplayNamePort clientDisplayNamePort;
     private final QueueWebSocketService queueWebSocketService;
+    private final QueueWaitlistApplicationService waitlistService;
 
     public QueueApplicationService(
             QueueRepository queueRepository,
@@ -61,18 +65,22 @@ public class QueueApplicationService {
             QueueNotificationPort notificationPort,
             EventBus eventBus,
             BusinessHoursPort businessHoursPort,
+            ProviderQueuePolicyPort queuePolicy,
             QueueSchedulingPort queueSchedulingPort,
             ClientDisplayNamePort clientDisplayNamePort,
-            QueueWebSocketService queueWebSocketService) {
+            QueueWebSocketService queueWebSocketService,
+            QueueWaitlistApplicationService waitlistService) {
         this.queueRepository = queueRepository;
         this.memberRepository = memberRepository;
         this.durationEstimator = durationEstimator;
         this.notificationPort = notificationPort;
         this.eventBus = eventBus;
         this.businessHoursPort = businessHoursPort;
+        this.queuePolicy = queuePolicy;
         this.queueSchedulingPort = queueSchedulingPort;
         this.clientDisplayNamePort = clientDisplayNamePort;
         this.queueWebSocketService = queueWebSocketService;
+        this.waitlistService = waitlistService;
     }
 
     @Transactional
@@ -111,6 +119,17 @@ public class QueueApplicationService {
             throw new ValidationException(ErrorCode.QUEUE_CLOSED, "Provider is currently closed");
         }
 
+        ProviderQueuePolicyPort.QueuePolicy policy = queuePolicy.policy(providerId);
+        if (!policy.walkInsEnabled()) {
+            throw new ValidationException(ErrorCode.QUEUE_CLOSED, "Walk-ins are currently disabled");
+        }
+
+        int size = groupSize != null ? groupSize : 1;
+        if (size > policy.maxPartySize()) {
+            throw new ValidationException(ErrorCode.VALIDATION_ERROR,
+                    "Party size exceeds the maximum of " + policy.maxPartySize());
+        }
+
         Queue queue = getOrCreateQueue(providerId);
 
         Duration duration = serviceId != null
@@ -118,16 +137,21 @@ public class QueueApplicationService {
                 : durationEstimator.getDefaultDuration();
 
         QueuePriority effectivePriority = priority != null ? priority : QueuePriority.NORMAL;
-        int size = groupSize != null ? groupSize : 1;
         QueueMember member = queue.addMember(clientId, duration, serviceId, employeeId, groupId, size, effectivePriority);
         // Persist the member explicitly so its generated identifier is assigned (on this instance)
         // before the response is built. Relying on the queue cascade left member.getId() null here.
         memberRepository.save(member);
         queueRepository.save(queue);
 
+        // If the client was on the waitlist, they've now converted to a real queue member.
+        waitlistService.markConverted(providerId, clientId);
+
         int waitMinutes = (int) Duration.between(Instant.now(), member.getEstimatedStartTime()).toMinutes();
 
         eventBus.publish(new ClientJoinedQueueEvent(providerId, clientId, queue.getId(), member.getPosition(), member.getEstimatedStartTime()));
+
+        WaitEstimate estimate = WaitEstimateCalculator.forMember(
+                Math.max(0, waitMinutes), completedSampleSize(queue), Math.max(0, member.getPosition() - 1));
 
         return new JoinQueueResponse(
                 queue.getId().toString(),
@@ -135,7 +159,8 @@ public class QueueApplicationService {
                 member.getPosition(),
                 effectivePriority,
                 member.getEstimatedStartTime(),
-                waitMinutes
+                waitMinutes,
+                estimate
         );
     }
 
@@ -240,6 +265,8 @@ public class QueueApplicationService {
         }
         queueRepository.save(queue);
         queueWebSocketService.broadcastQueueStatus(providerId, queue.getStatus());
+        // Opening the queue is the moment to notify everyone waiting on the waitlist.
+        waitlistService.notifyWaitlist(providerId, 20);
     }
 
     @Transactional
@@ -272,12 +299,22 @@ public class QueueApplicationService {
                 .map(QueueMember::getEstimatedStartTime)
                 .orElse(null);
 
+        WaitEstimate nextEstimate = activeMembers.stream()
+                .filter(m -> m.getStatus() == QueueMemberStatus.WAITING)
+                .findFirst()
+                .map(m -> WaitEstimateCalculator.forMember(
+                        Math.max(0, (int) Duration.between(Instant.now(), m.getEstimatedStartTime()).toMinutes()),
+                        completedSampleSize(queue),
+                        Math.max(0, m.getPosition() - 1)))
+                .orElse(null);
+
         return new QueueStatusResponse(
                 queue.getId().toString(),
                 queue.getStatus(),
                 waitingCount,
                 activeCount,
-                nextEstimated
+                nextEstimated,
+                nextEstimate
         );
     }
 
@@ -346,6 +383,10 @@ public class QueueApplicationService {
         Queue queue = member.getQueue();
         String providerId = queue != null ? queue.getProviderId().toString() : null;
         int queueSize = queue != null ? queue.getActiveMembers().size() : 0;
+        WaitEstimate estimate = WaitEstimateCalculator.forMember(
+                Math.max(0, waitMinutes),
+                queue != null ? completedSampleSize(queue) : 0,
+                Math.max(0, member.getPosition() - 1));
         return new QueueMemberResponse(
                 member.getId().toString(),
                 member.getClientId().toString(),
@@ -362,7 +403,21 @@ public class QueueApplicationService {
                 member.getGroupId() != null ? member.getGroupId().toString() : null,
                 member.getGroupSize(),
                 providerId,
-                queueSize
+                queueSize,
+                estimate
         );
+    }
+
+    /**
+     * How many completed visits with a measured duration the provider has accumulated — the history
+     * sample that drives the confidence level of the wait estimate.
+     */
+    private int completedSampleSize(Queue queue) {
+        if (queue == null || queue.getMembers() == null) {
+            return 0;
+        }
+        return (int) queue.getMembers().stream()
+                .filter(m -> m.getStatus() == QueueMemberStatus.COMPLETED && m.getActualDuration() != null)
+                .count();
     }
 }

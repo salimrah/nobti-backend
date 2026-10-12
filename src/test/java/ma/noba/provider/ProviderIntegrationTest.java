@@ -60,6 +60,47 @@ class ProviderIntegrationTest extends AbstractIntegrationTest {
         assertThat(content).anyMatch(m -> name.equals(m.get("name")));
     }
 
+    @Test
+    @DisplayName("Free-text search finds active providers by description only")
+    void searchFindsActiveProviderByDescription() {
+        // The token appears only in the description, so name-only matching (the old behaviour) would
+        // miss it as long as no other active provider's name matches.
+        String token = "zzdesc" + UUID.randomUUID().toString().substring(0, 6);
+        var provider = ma.noba.provider.domain.model.Provider.create(UUID.randomUUID(), "Generic Shop", "Haircut");
+        provider.setDescription("Specialises in " + token + " treatments");
+        provider.setStatus(ma.noba.provider.domain.model.ProviderStatus.ACTIVE);
+        providerRepository.save(provider);
+
+        var results = providerRepository.searchActive(token,
+                org.springframework.data.domain.PageRequest.of(0, 50)).getContent();
+
+        assertThat(results)
+                .extracting(ma.noba.provider.domain.model.Provider::getName)
+                .contains("Generic Shop");
+    }
+
+    @Test
+    @DisplayName("Name matches rank above description-only matches")
+    void searchRanksNameMatchesFirst() {
+        String token = "zzrank" + UUID.randomUUID().toString().substring(0, 6);
+
+        var nameMatch = ma.noba.provider.domain.model.Provider.create(UUID.randomUUID(), "Shop " + token, "Haircut");
+        nameMatch.setStatus(ma.noba.provider.domain.model.ProviderStatus.ACTIVE);
+        providerRepository.save(nameMatch);
+
+        // Saved second, so only a relevance ranking (not created-at) can put the name match first.
+        var descMatch = ma.noba.provider.domain.model.Provider.create(UUID.randomUUID(), "Other Place", "Haircut");
+        descMatch.setDescription("We offer " + token + " services");
+        descMatch.setStatus(ma.noba.provider.domain.model.ProviderStatus.ACTIVE);
+        providerRepository.save(descMatch);
+
+        var results = providerRepository.searchActive(token,
+                org.springframework.data.domain.PageRequest.of(0, 50)).getContent();
+
+        assertThat(results).isNotEmpty();
+        assertThat(results.get(0).getName()).isEqualTo("Shop " + token);
+    }
+
     private String accessToken;
     private UUID providerId;
 

@@ -21,5 +21,6 @@ public record QueueMemberResponse(
         String groupId,
         int groupSize,
         String providerId,
-        int queueSize
+        int queueSize,
+        WaitEstimate estimate
 ) {}

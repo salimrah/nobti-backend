@@ -34,6 +34,7 @@ class BookingApplicationServiceTest {
     @Mock AppointmentRepository appointmentRepository;
     @Mock AvailabilitySlotRepository availabilitySlotRepository;
     @Mock ProviderLookupPort providerLookupPort;
+    @Mock ma.noba.booking.domain.port.service.ProviderBookingPolicyPort bookingPolicy;
 
     private BookingApplicationService service;
 
@@ -44,7 +45,9 @@ class BookingApplicationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new BookingApplicationService(appointmentRepository, availabilitySlotRepository, providerLookupPort);
+        org.mockito.Mockito.lenient().when(bookingPolicy.policy(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new ma.noba.booking.domain.port.service.ProviderBookingPolicyPort.BookingPolicy(true, 0));
+        service = new BookingApplicationService(appointmentRepository, availabilitySlotRepository, providerLookupPort, bookingPolicy);
     }
 
     private Appointment appointment() {
@@ -106,5 +109,20 @@ class BookingApplicationServiceTest {
 
         assertThat(slot.isActive()).isTrue();
         verify(availabilitySlotRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Cancellation is rejected inside the provider's cancellation window")
+    void cancelWithinWindowIsRejected() {
+        Appointment appointment = new Appointment(ownerUserId, providerId, null,
+                Instant.now().plusSeconds(600), Instant.now().plusSeconds(2400), null);
+        UUID id = UUID.randomUUID();
+        when(appointmentRepository.findById(id)).thenReturn(Optional.of(appointment));
+        when(bookingPolicy.policy(providerId))
+                .thenReturn(new ma.noba.booking.domain.port.service.ProviderBookingPolicyPort.BookingPolicy(true, 60));
+
+        assertThatThrownBy(() -> service.cancelAppointment(id, ownerUserId))
+                .isInstanceOf(ma.noba.shared.domain.exception.ValidationException.class);
+        verify(appointmentRepository, never()).save(any());
     }
 }

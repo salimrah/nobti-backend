@@ -24,6 +24,7 @@ public interface PaymentTransactionRepository {
      */
     Optional<PaymentTransaction> findByStripePaymentIntentIdForUpdate(String stripePaymentIntentId);
     Page<PaymentTransaction> findByUserId(UUID userId, Pageable pageable);
+    List<PaymentTransaction> findByUserIdOrderByCreatedAtDesc(UUID userId);
     Page<PaymentTransaction> findByProviderId(UUID providerId, Pageable pageable);
     List<PaymentTransaction> findByProviderIdAndStatus(UUID providerId, PaymentStatus status);
 }
