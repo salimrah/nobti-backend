@@ -48,11 +48,11 @@ fi
 echo "==> Target: $SPRING_DATASOURCE_URL"
 echo "==> Running Flyway migrations..."
 
-./mvnw flyway:migrate \
+./mvnw -pl modules/noba-app flyway:migrate \
     -Dflyway.url="$SPRING_DATASOURCE_URL" \
     -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
     -Dflyway.password="$SPRING_DATASOURCE_PASSWORD" \
-    -Dflyway.locations="filesystem:src/main/resources/db/migration" \
+    -Dflyway.locations="filesystem:modules/noba-app/src/main/resources/db/migration" \
     -Dflyway.baselineOnMigrate=true \
     -q
 

@@ -73,7 +73,7 @@ switch -regex ($launchMode) {
     '^(terminal|mvn|spring)$' {
         Write-Host ""
         Write-Host "  Starting Spring Boot from terminal..."
-        ./mvnw.cmd clean spring-boot:run
+        ./mvnw.cmd -q -DskipTests -Dspotbugs.skip=true -Djacoco.skip=true -pl modules/noba-app -am install; ./mvnw.cmd -pl modules/noba-app spring-boot:run
     }
     default {
         Write-Host ""
