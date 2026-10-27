@@ -122,6 +122,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(ex.getStatusCode()).body(response);
     }
 
+    /**
+     * Malformed path variables (e.g. a non-UUID where an id is expected) are client errors,
+     * not 500s. This keeps routes such as /providers/{id} well-behaved for bad input.
+     */
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex) {
+        ErrorResponse response = ErrorResponse.of(
+                "VALIDATION_ERROR",
+                "Invalid value for parameter '" + ex.getName() + "'",
+                null
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException ex) {
         captureSentry(ex, SentryLevel.WARNING);
