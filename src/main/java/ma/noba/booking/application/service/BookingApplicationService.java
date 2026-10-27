@@ -64,8 +64,10 @@ public class BookingApplicationService {
                     a.getStartTime().isBefore(slotEndInst) &&
                     a.getEndTime().isAfter(slotStartInst)
                 );
+                // Slots that already started today must not be offered for booking.
+                boolean isPast = slotStartInst.isBefore(Instant.now());
 
-                timeSlots.add(new AvailableSlotsResponse.TimeSlot(current, slotEnd, !isBooked));
+                timeSlots.add(new AvailableSlotsResponse.TimeSlot(current, slotEnd, !isBooked && !isPast));
                 current = slotEnd;
             }
         }

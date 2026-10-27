@@ -20,6 +20,7 @@ import ma.noba.queue.domain.port.service.QueueNotificationPort;
 import ma.noba.queue.domain.port.service.QueueRepository;
 import ma.noba.queue.domain.port.service.QueueSchedulingPort;
 import ma.noba.queue.domain.port.service.ProviderQueuePolicyPort;
+import ma.noba.queue.domain.port.service.ProviderServiceNamePort;
 import ma.noba.queue.domain.port.service.ServiceDurationEstimator;
 import ma.noba.shared.domain.event.EventBus;
 import ma.noba.shared.application.dto.PagedResponse;
@@ -55,6 +56,7 @@ public class QueueApplicationService {
     private final ProviderQueuePolicyPort queuePolicy;
     private final QueueSchedulingPort queueSchedulingPort;
     private final ClientDisplayNamePort clientDisplayNamePort;
+    private final ProviderServiceNamePort serviceNamePort;
     private final QueueWebSocketService queueWebSocketService;
     private final QueueWaitlistApplicationService waitlistService;
 
@@ -68,6 +70,7 @@ public class QueueApplicationService {
             ProviderQueuePolicyPort queuePolicy,
             QueueSchedulingPort queueSchedulingPort,
             ClientDisplayNamePort clientDisplayNamePort,
+            ProviderServiceNamePort serviceNamePort,
             QueueWebSocketService queueWebSocketService,
             QueueWaitlistApplicationService waitlistService) {
         this.queueRepository = queueRepository;
@@ -79,6 +82,7 @@ public class QueueApplicationService {
         this.queuePolicy = queuePolicy;
         this.queueSchedulingPort = queueSchedulingPort;
         this.clientDisplayNamePort = clientDisplayNamePort;
+        this.serviceNamePort = serviceNamePort;
         this.queueWebSocketService = queueWebSocketService;
         this.waitlistService = waitlistService;
     }
@@ -387,11 +391,13 @@ public class QueueApplicationService {
                 Math.max(0, waitMinutes),
                 queue != null ? completedSampleSize(queue) : 0,
                 Math.max(0, member.getPosition() - 1));
+        String serviceName = serviceNamePort.findServiceName(member.getServiceId()).orElse(null);
         return new QueueMemberResponse(
                 member.getId().toString(),
                 member.getClientId().toString(),
                 clientName,
                 member.getServiceId(),
+                serviceName,
                 member.getEmployeeId() != null ? member.getEmployeeId().toString() : null,
                 member.getPosition(),
                 member.getStatus(),

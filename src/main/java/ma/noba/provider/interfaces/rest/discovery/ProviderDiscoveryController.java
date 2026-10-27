@@ -2,6 +2,7 @@ package ma.noba.provider.interfaces.rest.discovery;
 
 import ma.noba.provider.application.dto.NearbyProviderResponse;
 import ma.noba.provider.application.dto.ProviderResponse;
+import ma.noba.provider.application.dto.ProviderServiceResponse;
 import ma.noba.provider.application.service.ProviderApplicationService;
 import ma.noba.provider.application.service.ProviderDiscoveryService;
 import ma.noba.shared.application.dto.PagedResponse;
@@ -41,6 +42,12 @@ public class ProviderDiscoveryController {
     @GetMapping("/{id}")
     public ResponseEntity<ProviderResponse> getProvider(@PathVariable UUID id) {
         return ResponseEntity.ok(providerService.getProvider(id));
+    }
+
+    @Operation(summary = "Get a provider's active services")
+    @GetMapping("/{id}/services")
+    public ResponseEntity<java.util.List<ProviderServiceResponse>> getProviderServices(@PathVariable UUID id) {
+        return ResponseEntity.ok(providerService.getServices(id));
     }
 
     @Operation(summary = "Get customer's favorite providers")

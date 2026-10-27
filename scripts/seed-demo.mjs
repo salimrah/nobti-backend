@@ -211,6 +211,14 @@ function todayJavaDow() {
   return d === 0 ? 7 : d;
 }
 
+/** Today plus the adjacent days — robust to the app/server timezone differing from the host by ±1 day. */
+function closedWindow() {
+  const dow = todayJavaDow();
+  const before = dow === 1 ? 7 : dow - 1;
+  const after = dow === 7 ? 1 : dow + 1;
+  return new Set([dow, before, after]);
+}
+
 // ── Run ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -244,15 +252,15 @@ async function main() {
         firstName: p.name.split(' ')[0], lastName: 'Owner',
       }, token);
     }
-    const dow = todayJavaDow();
+    const closedDays = closedWindow();
     const days = [1, 2, 3, 4, 5, 6, 7].map(d => ({
       dayOfWeek: d,
       opensAt: '00:00',
       closesAt: '23:59',
-      closed: p.closedToday === true && d === dow,
+      closed: p.closedToday === true && closedDays.has(d),
     }));
     await put('/providers/self/hours', { days }, token);
-    providers.push({ ...p, id: created.id, token });
+    providers.push({ ...p, id: created.id, ownerId: created.userId, token });
   }
 
   // 2) Clients + user ids
@@ -272,6 +280,17 @@ async function main() {
   const s = [];
   s.push('BEGIN;');
 
+  // display names for every demo account (OTP signup does not collect a name)
+  for (const prov of providers) {
+    const first = prov.name.split(' ')[0];
+    s.push(`UPDATE user_profile SET first_name=${q(first)}, last_name=${q('Owner')}, display_name=${q(prov.name)}
+            WHERE user_id=${q(prov.ownerId)};`);
+  }
+  for (const cl of clients) {
+    s.push(`UPDATE user_profile SET first_name=${q(cl.first)}, last_name=${q(cl.last)}, display_name=${q(cl.first + ' ' + cl.last)}
+            WHERE user_id=${q(cl.id)};`);
+  }
+
   // activate + enrich providers
   for (const prov of providers) {
     s.push(`UPDATE provider SET status='ACTIVE', verified=true, verification_date=now(),
@@ -284,6 +303,12 @@ async function main() {
     for (const svc of prov.services) {
       s.push(`INSERT INTO provider_service(provider_id, name, duration, price, active, category, created_at)
               VALUES (${q(prov.id)}, ${q(svc.name)}, interval '${svc.minutes} minutes', ${svc.price}, true, ${q(prov.category)}, now());`);
+    }
+    // recurring availability (0=Sunday .. 6=Saturday, matching AvailabilitySlot)
+    s.push(`DELETE FROM availability_slot WHERE provider_id=${q(prov.id)};`);
+    for (let d = 0; d <= 6; d++) {
+      s.push(`INSERT INTO availability_slot(id, provider_id, day_of_week, start_time, end_time, is_active, created_at)
+              VALUES (gen_random_uuid(), ${q(prov.id)}, ${d}, '09:00', '18:00', true, now());`);
     }
     s.push(`INSERT INTO provider_settings(provider_id, notification_locale) VALUES (${q(prov.id)}, 'fr') ON CONFLICT DO NOTHING;`);
     // subscription (the app may auto-create a FREE one)
@@ -406,8 +431,10 @@ async function main() {
     }
   }
 
-  console.log('\n✅ Demo data seeded.\n');
-  console.log('   Client login (rich data):  +212700000010  (Amine)');
+  // Fresh "serving for" timestamps for the demo (avoids "serving for 20000 min").
+  sql(`UPDATE queue_member SET actual_start_time = now() - interval '5 minutes' WHERE status='ACTIVE';`);
+
+  console.log('\n✅ Demo data seeded.\n');  console.log('   Client login (rich data):  +212700000010  (Amine)');
   console.log('   Other clients:             +212700000011 … +212700000015');
   console.log('   Provider logins:           +212700000001 … +212700000008');
   console.log('   Closed provider (waitlist):Spa Oasis (+212700000005)');

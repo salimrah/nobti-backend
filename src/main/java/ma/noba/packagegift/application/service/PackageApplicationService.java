@@ -37,12 +37,14 @@ public class PackageApplicationService {
         return toResponse(pkg);
     }
 
+    @Transactional(readOnly = true)
     public List<PackageResponse> getProviderPackages(UUID providerId) {
         return packageRepository.findByProviderId(providerId).stream()
             .map(this::toResponse)
             .toList();
     }
 
+    @Transactional(readOnly = true)
     public List<PackageResponse> getActiveProviderPackages(UUID providerId) {
         return packageRepository.findByProviderIdAndActive(providerId, true).stream()
             .map(this::toResponse)

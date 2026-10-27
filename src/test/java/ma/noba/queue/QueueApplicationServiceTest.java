@@ -47,6 +47,7 @@ class QueueApplicationServiceTest {
     @Mock ma.noba.queue.domain.port.service.ClientDisplayNamePort clientDisplayNamePort;
     @Mock ma.noba.queue.application.service.QueueWebSocketService queueWebSocketService;
     @Mock ma.noba.queue.application.service.QueueWaitlistApplicationService waitlistService;
+    @Mock ma.noba.queue.domain.port.service.ProviderServiceNamePort serviceNamePort;
 
     private QueueApplicationService service;
     private UUID providerId;
@@ -58,7 +59,7 @@ class QueueApplicationServiceTest {
                 .thenReturn(new ma.noba.queue.domain.port.service.ProviderQueuePolicyPort.QueuePolicy(10, true));
         service = new QueueApplicationService(queueRepository, memberRepository,
                 durationEstimator, notificationPort, eventBus, businessHoursPort, queuePolicy, queueScheduler,
-                clientDisplayNamePort, queueWebSocketService, waitlistService);
+                clientDisplayNamePort, serviceNamePort, queueWebSocketService, waitlistService);
         providerId = UUID.randomUUID();
         clientId = UUID.randomUUID();
     }

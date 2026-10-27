@@ -18,12 +18,14 @@ public class PromotionApplicationService {
 
     private final PromotionRepository promotionRepository;
 
+    @Transactional(readOnly = true)
     public List<PromotionResponse> getProviderPromotions(UUID providerId) {
         return promotionRepository.findByProviderId(providerId).stream()
             .map(PromotionApplicationService::toResponse)
             .toList();
     }
 
+    @Transactional(readOnly = true)
     public List<PromotionResponse> getActivePromotions(UUID providerId) {
         return promotionRepository.findValidPromotions(providerId, Instant.now()).stream()
             .map(PromotionApplicationService::toResponse)

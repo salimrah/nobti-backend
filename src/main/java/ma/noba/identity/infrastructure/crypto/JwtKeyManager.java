@@ -25,8 +25,11 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class JwtKeyManager {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(JwtKeyManager.class);
+
     private final Map<String, RSAKey> keys = new ConcurrentHashMap<>();
     private final java.util.Deque<String> keyOrder = new java.util.concurrent.ConcurrentLinkedDeque<>();
+    private final java.nio.file.Path keyStore;
 
     /** How many signing keys are kept valid at once (current + previous, to survive rotation). */
     private static final int RETAINED_KEYS = 2;
@@ -35,12 +38,87 @@ public class JwtKeyManager {
     private volatile String currentKid;
 
     public JwtKeyManager(JwtTokenProperties props) {
-        // generate initial key
-        rotate();
+        String configured = props.jwt != null ? props.jwt.keyStorePath : null;
+        this.keyStore = (configured != null && !configured.isBlank())
+                ? java.nio.file.Path.of(configured)
+                : null;
+        // Reuse persisted keys so a restart does not invalidate every issued token.
+        if (keyStore == null || !loadPersistedKeys()) {
+            rotate();
+        }
     }
 
-    // Rotate every N hours, where N comes from security.jwt.key-rotation-hours
-    @Scheduled(fixedDelayString = "${security.jwt.key-rotation-hours:24}", timeUnit = TimeUnit.HOURS, initialDelay = 0)
+    private java.nio.file.Path currentKidFile() {
+        return keyStore.resolveSibling(keyStore.getFileName() + ".current");
+    }
+
+    private boolean loadPersistedKeys() {
+        if (keyStore == null) {
+            return false;
+        }
+        try {
+            if (!java.nio.file.Files.exists(keyStore)) {
+                return false;
+            }
+            String json = java.nio.file.Files.readString(keyStore);
+            JWKSet set = JWKSet.parse(json);
+            for (JWK jwk : set.getKeys()) {
+                if (jwk instanceof RSAKey rsa) {
+                    keys.put(rsa.getKeyID(), rsa);
+                    keyOrder.addLast(rsa.getKeyID());
+                }
+            }
+            if (keys.isEmpty()) {
+                return false;
+            }
+            // Restore which key is "current" (used for signing new tokens); validation uses all keys.
+            java.nio.file.Path kidFile = currentKidFile();
+            if (java.nio.file.Files.exists(kidFile)) {
+                String persistedKid = java.nio.file.Files.readString(kidFile).trim();
+                if (keys.containsKey(persistedKid)) {
+                    currentKid = persistedKid;
+                }
+            }
+            if (currentKid == null) {
+                currentKid = keyOrder.peekLast();
+            }
+            log.info("Loaded {} persisted JWT signing key(s)", keys.size());
+            return true;
+        } catch (Exception e) {
+            log.warn("Failed to load persisted JWT keys from {}: {}", keyStore, e.getMessage());
+            return false;
+        }
+    }
+
+    private void persistKeys() {
+        if (keyStore == null) {
+            return;
+        }
+        try {
+            if (keyStore.getParent() != null) {
+                java.nio.file.Files.createDirectories(keyStore.getParent());
+            }
+            // Includes private material — keep this file out of source control (defaults to the temp dir).
+            // Serialize with private material (JWKSet.toString() emits public keys only).
+            java.nio.file.Files.writeString(keyStore,
+                    new JWKSet(new java.util.ArrayList<>(keys.values())).toJSONObject(false).toString());
+            java.nio.file.Files.writeString(currentKidFile(), currentKid == null ? "" : currentKid);
+            try {
+                java.nio.file.Files.setPosixFilePermissions(keyStore,
+                        java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            } catch (Exception ignored) {
+                // non-POSIX filesystem
+            }
+        } catch (Exception e) {
+            log.warn("Failed to persist JWT keys to {}: {}", keyStore, e.getMessage());
+        }
+    }
+
+    // Rotate every N hours, where N comes from security.jwt.key-rotation-hours. The initial delay
+    // equals the period so a restart does not immediately retire the key that signed live tokens.
+    @Scheduled(fixedDelayString = "${security.jwt.key-rotation-hours:24}",
+               initialDelayString = "${security.jwt.key-rotation-hours:24}",
+               timeUnit = TimeUnit.HOURS)
     public void rotate() {
         try {
             KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
@@ -65,6 +143,7 @@ public class JwtKeyManager {
                     keys.remove(retired);
                 }
             }
+            persistKeys();
 
         } catch (Exception e) {
             throw new IllegalStateException("Failed to rotate JWT key", e);

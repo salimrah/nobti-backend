@@ -23,5 +23,6 @@ public record ProviderResponse(
         boolean sensoryFriendly,
         SubscriptionTier subscriptionTier,
         double averageRating,
-        int ratingCount
+        int ratingCount,
+        boolean openNow
 ) {}

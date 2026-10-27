@@ -10,6 +10,7 @@ public record QueueMemberResponse(
         String clientId,
         String clientName,
         String serviceId,
+        String serviceName,
         String employeeId,
         int position,
         QueueMemberStatus status,

@@ -22,6 +22,8 @@ public class JwtTokenProperties {
         public int keyRotationHours;
         public int maxActiveSessions;
         public int idleTimeoutDays;
+        /** Optional path to persist signing keys across restarts (dev convenience; use a secret mount in prod). */
+        public String keyStorePath;
     }
 
     @Getter @Setter
