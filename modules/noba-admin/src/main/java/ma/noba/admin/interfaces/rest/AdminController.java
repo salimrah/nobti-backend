@@ -2,8 +2,7 @@ package ma.noba.admin.interfaces.rest;
 
 import ma.noba.admin.application.dto.AdminStatsResponse;
 import ma.noba.admin.application.service.AdminService;
-import ma.noba.provider.application.dto.ProviderResponse;
-import ma.noba.provider.application.service.ProviderApplicationService;
+import ma.noba.shared.domain.port.AdminProviderPort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -17,12 +16,10 @@ import java.util.UUID;
 public class AdminController {
 
     private final AdminService adminService;
-    private final ProviderApplicationService providerApplicationService;
 
-    public AdminController(AdminService adminService,
-                           ProviderApplicationService providerApplicationService) {
+
+    public AdminController(AdminService adminService) {
         this.adminService = adminService;
-        this.providerApplicationService = providerApplicationService;
     }
 
     @GetMapping("/stats")
@@ -43,8 +40,8 @@ public class AdminController {
     }
 
     @GetMapping("/providers/pending")
-    public ResponseEntity<List<ProviderResponse>> getPendingProviders() {
-        return ResponseEntity.ok(providerApplicationService.getPendingProviders());
+    public ResponseEntity<List<AdminProviderPort.PendingProvider>> getPendingProviders() {
+        return ResponseEntity.ok(adminService.pendingProviders());
     }
 
     @PutMapping("/providers/{providerId}/approve")

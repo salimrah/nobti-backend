@@ -71,6 +71,9 @@ jobs:
           SPRING_DATASOURCE_PASSWORD: test
           SPRING_DATA_REDIS_URL: redis://localhost:6379
 
+      - name: Static analysis (SpotBugs)
+        run: ./mvnw -DskipTests -Djacoco.skip=true verify
+
       - name: Run Integration Tests (Docker)
         run: ./mvnw test -Dgroups=docker -DexcludedGroups=
         env:

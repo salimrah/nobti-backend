@@ -91,6 +91,14 @@ class ModuleBoundaryTest {
             .should().dependOnClassesThat().resideInAnyPackage("..infra..", "..infrastructure..");
 
     /**
+     * The only cross-module surface is a module's ports, events, service interfaces and DTOs.
+     * Implementation packages (application.service, infra, interfaces) must not leak.
+     */
+    private static final ArchRule MODULES_USE_ONLY_PUBLIC_API = classes()
+            .that().resideInAPackage("ma.noba..")
+            .should(useOnlyPublicApiOfOtherModules());
+
+    /**
      * A module may use another module's public contract, but never its JPA entities. This is the
      * rule that makes a later extraction (or SaaS replacement) possible.
      */
@@ -174,9 +182,48 @@ class ModuleBoundaryTest {
     }
 
     @Test
+    void modulesUseOnlyPublicApi() {
+        MODULES_USE_ONLY_PUBLIC_API.check(CLASSES);
+    }
+
+    @Test
     void modulesDoNotSharePersistenceEntities() {
         MODULES_DO_NOT_SHARE_PERSISTENCE_ENTITIES.check(CLASSES);
     }
+
+    private static ArchCondition<JavaClass> useOnlyPublicApiOfOtherModules() {
+        return new ArchCondition<>("only depend on another module's public API") {
+            @Override
+            public void check(JavaClass item, ConditionEvents events) {
+                String sourceModule = moduleOf(item.getPackageName());
+                if (sourceModule == null || PLATFORM_MODULES.contains(sourceModule)) {
+                    return;
+                }
+                for (var dependency : item.getDirectDependenciesFromSelf()) {
+                    JavaClass target = dependency.getTargetClass();
+                    String targetPackage = target.getPackageName();
+                    String targetModule = moduleOf(targetPackage);
+                    if (targetModule == null || targetModule.equals(sourceModule)
+                            || PLATFORM_MODULES.contains(targetModule)) {
+                        continue;
+                    }
+                    String prefix = "ma.noba." + targetModule + ".";
+                    String subPackage = targetPackage.startsWith(prefix)
+                            ? targetPackage.substring(prefix.length()) : targetPackage;
+                    boolean publicApi = subPackage.startsWith("domain.port")
+                            || subPackage.startsWith("domain.event")
+                            || subPackage.startsWith("domain.service")
+                            || subPackage.startsWith("application.dto");
+                    if (!publicApi) {
+                        events.add(SimpleConditionEvent.violated(item,
+                                item.getName() + " uses " + targetPackage + "." + target.getSimpleName()));
+                    }
+                }
+            }
+        };
+    }
+
+    private static final Set<String> PLATFORM_MODULES = Set.of("app", "shared", "config");
 
     private static ArchCondition<JavaClass> notDependOnOtherModulesEntities() {
         return new ArchCondition<>("not depend on another module's domain model") {
