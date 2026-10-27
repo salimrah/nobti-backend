@@ -34,7 +34,20 @@ public class LogStripePaymentAdapter implements StripePaymentPort {
     }
 
     @Override
-    public void transferToProvider(String stripePaymentIntentId, String stripeAccountId, BigDecimal amount) {
-        log.warn("Stripe not configured — would transfer {} to {} for PI: {}", amount, stripeAccountId, stripePaymentIntentId);
+    public String transferToProvider(String sourceChargeId, String stripeAccountId, BigDecimal amount, String currency) {
+        log.warn("Stripe not configured — would transfer {} {} to {} from charge: {}",
+            amount, currency, stripeAccountId, sourceChargeId);
+        return "tr_mock_" + UUID.randomUUID();
+    }
+
+    @Override
+    public void reverseProviderTransfer(String stripeTransferId, BigDecimal amount) {
+        log.warn("Stripe not configured — would reverse transfer {} amount {}", stripeTransferId, amount);
+    }
+
+    @Override
+    public boolean accountPayoutsEnabled(String stripeAccountId) {
+        log.warn("Stripe not configured — treating account {} as payouts-enabled for local dev", stripeAccountId);
+        return true;
     }
 }

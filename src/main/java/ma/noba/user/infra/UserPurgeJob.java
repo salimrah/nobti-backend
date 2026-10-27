@@ -5,6 +5,7 @@ import ma.noba.identity.domain.repository.UserRepository;
 import ma.noba.user.domain.port.UserViewRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,7 @@ public class UserPurgeJob {
     }
 
     @Scheduled(cron = "0 0 5 * * *")
+    @SchedulerLock(name = "user-purge", lockAtMostFor = "1h", lockAtLeastFor = "5m")
     @Transactional
     public void purgeDeletedUsers() {
         Instant cutoff = Instant.now().minusSeconds(PURGE_AFTER_DAYS * 86400L);

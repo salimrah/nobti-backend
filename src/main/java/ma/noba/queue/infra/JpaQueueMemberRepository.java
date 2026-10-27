@@ -21,6 +21,8 @@ public interface JpaQueueMemberRepository extends JpaRepository<QueueMember, UUI
 
     Page<QueueMember> findByQueueId(UUID queueId, Pageable pageable);
 
+    Page<QueueMember> findByQueueIdAndStatusIn(UUID queueId, java.util.Collection<QueueMemberStatus> statuses, Pageable pageable);
+
     @Query("SELECT m FROM QueueMember m JOIN FETCH m.queue WHERE m.status = :status AND m.estimatedStartTime <= :threshold")
     List<QueueMember> findDueForReminder(
             @Param("status") QueueMemberStatus status,

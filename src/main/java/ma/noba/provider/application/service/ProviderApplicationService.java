@@ -11,6 +11,7 @@ import ma.noba.provider.domain.model.Provider;
 import ma.noba.provider.domain.model.ProviderFavorite;
 import ma.noba.provider.domain.model.ProviderRating;
 import ma.noba.provider.domain.port.service.ProviderFavoriteRepository;
+import ma.noba.provider.domain.port.service.BusinessHoursRepository;
 import ma.noba.provider.domain.port.service.ProviderProvisioningPort;
 import ma.noba.provider.domain.port.service.ProviderRatingRepository;
 import ma.noba.provider.domain.port.service.ProviderRepository;
@@ -51,6 +52,7 @@ public class ProviderApplicationService {
     private final ServiceCategoryRepository serviceCategoryRepository;
     private final ProviderProvisioningPort provisioningPort;
     private final ProviderSubscriptionRepository subscriptionRepository;
+    private final BusinessHoursRepository businessHoursRepository;
     private final EventBus eventBus;
 
     public ProviderApplicationService(
@@ -60,6 +62,7 @@ public class ProviderApplicationService {
             ServiceCategoryRepository serviceCategoryRepository,
             ProviderProvisioningPort provisioningPort,
             ProviderSubscriptionRepository subscriptionRepository,
+            BusinessHoursRepository businessHoursRepository,
             EventBus eventBus) {
         this.providerRepository = providerRepository;
         this.ratingRepository = ratingRepository;
@@ -67,6 +70,7 @@ public class ProviderApplicationService {
         this.serviceCategoryRepository = serviceCategoryRepository;
         this.provisioningPort = provisioningPort;
         this.subscriptionRepository = subscriptionRepository;
+        this.businessHoursRepository = businessHoursRepository;
         this.eventBus = eventBus;
     }
 
@@ -99,6 +103,12 @@ public class ProviderApplicationService {
                     log.warn("Provider not found: {}", providerId);
                     return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found");
                 });
+        // Public discovery must not expose providers that are not yet approved (PENDING/REJECTED/
+        // INACTIVE) or their coordinates. The owner uses /providers/self instead.
+        if (!provider.isActive()) {
+            log.debug("Hiding non-active provider {} from public discovery", providerId);
+            throw new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found");
+        }
         return toResponse(provider);
     }
 
@@ -213,6 +223,11 @@ public class ProviderApplicationService {
     @Transactional(readOnly = true)
     public PagedResponse<ProviderResponse> searchByCategory(String category, Pageable pageable) {
         return toPagedResponse(providerRepository.findByCategory(category, pageable));
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<ProviderResponse> searchByText(String query, Pageable pageable) {
+        return toPagedResponse(providerRepository.searchActive(query, pageable));
     }
 
     @Transactional(readOnly = true)
@@ -405,8 +420,18 @@ public class ProviderApplicationService {
                 provider.isSensoryFriendly(),
                 tier,
                 avgRatings.getOrDefault(provider.getId(), ratingRepository.getAverageRating(provider.getId())),
-                ratingCounts.getOrDefault(provider.getId(), (int) ratingRepository.countByProviderId(provider.getId()))
+                ratingCounts.getOrDefault(provider.getId(), (int) ratingRepository.countByProviderId(provider.getId())),
+                isOpenNow(provider.getId())
         );
+    }
+
+    /** Whether the provider is open right now, based on today's business hours. */
+    private boolean isOpenNow(UUID providerId) {
+        int today = java.time.LocalDate.now().getDayOfWeek().getValue();
+        java.time.LocalTime now = java.time.LocalTime.now();
+        return businessHoursRepository.findByProviderIdAndDayOfWeek(providerId, today)
+                .map(hours -> hours.isOpenNow(now))
+                .orElse(false);
     }
 
     private PagedResponse<ProviderResponse> toPagedResponse(Page<Provider> providerPage) {

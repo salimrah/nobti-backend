@@ -9,5 +9,6 @@ public record QueueStatusResponse(
         QueueStatus status,
         int waitingCount,
         int activeCount,
-        Instant nextEstimatedTime
+        Instant nextEstimatedTime,
+        WaitEstimate nextEstimate
 ) {}

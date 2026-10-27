@@ -53,6 +53,9 @@ public class PaymentTransaction {
     @Column(name = "stripe_charge_id", length = 100)
     private String stripeChargeId;
 
+    @Column(name = "stripe_transfer_id", length = 100)
+    private String stripeTransferId;
+
     @Column(length = 500)
     private String failureMessage;
 
@@ -89,5 +92,10 @@ public class PaymentTransaction {
     public void markRefunded() {
         this.status = PaymentStatus.REFUNDED;
         this.completedAt = Instant.now();
+    }
+
+    /** Records the Stripe transfer that paid the provider, so it can be reversed on refund. */
+    public void markTransferred(String stripeTransferId) {
+        this.stripeTransferId = stripeTransferId;
     }
 }

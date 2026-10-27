@@ -35,7 +35,7 @@ public class BookingController {
 
     @PostMapping("/providers/{providerId}/appointments")
     public ResponseEntity<AppointmentResponse> bookAppointment(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @PathVariable String providerId,
         @Valid @RequestBody CreateAppointmentRequest request
     ) {
@@ -47,7 +47,7 @@ public class BookingController {
     }
 
     @GetMapping("/appointments/me")
-    public ResponseEntity<List<AppointmentResponse>> getMyAppointments(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<List<AppointmentResponse>> getMyAppointments(@AuthenticationPrincipal(expression = "id") UUID userId) {
         List<Appointment> appointments = bookingService.getUserAppointments(userId);
         List<AppointmentResponse> response = appointments.stream()
             .map(a -> BookingApplicationService.toResponse(a, null, null))
@@ -57,7 +57,7 @@ public class BookingController {
 
     @GetMapping("/providers/self/appointments")
     public ResponseEntity<List<AppointmentResponse>> getMyProviderAppointments(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
         UUID providerId = getProviderIdForUser(userId);
@@ -70,7 +70,7 @@ public class BookingController {
 
     @PutMapping("/appointments/{id}/cancel")
     public ResponseEntity<Void> cancelAppointment(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @PathVariable UUID id
     ) {
         bookingService.cancelAppointment(id, userId);
@@ -78,26 +78,35 @@ public class BookingController {
     }
 
     @PutMapping("/appointments/{id}/confirm")
-    public ResponseEntity<Void> confirmAppointment(@PathVariable UUID id) {
-        bookingService.confirmAppointment(id);
+    public ResponseEntity<Void> confirmAppointment(
+        @AuthenticationPrincipal(expression = "id") UUID userId,
+        @PathVariable UUID id
+    ) {
+        bookingService.confirmAppointment(id, userId);
         return ResponseEntity.ok().build();
     }
 
     @PutMapping("/appointments/{id}/complete")
-    public ResponseEntity<Void> completeAppointment(@PathVariable UUID id) {
-        bookingService.completeAppointment(id);
+    public ResponseEntity<Void> completeAppointment(
+        @AuthenticationPrincipal(expression = "id") UUID userId,
+        @PathVariable UUID id
+    ) {
+        bookingService.completeAppointment(id, userId);
         return ResponseEntity.ok().build();
     }
 
     @PutMapping("/appointments/{id}/no-show")
-    public ResponseEntity<Void> markNoShow(@PathVariable UUID id) {
-        bookingService.markNoShow(id);
+    public ResponseEntity<Void> markNoShow(
+        @AuthenticationPrincipal(expression = "id") UUID userId,
+        @PathVariable UUID id
+    ) {
+        bookingService.markNoShow(id, userId);
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/providers/self/availability")
     public ResponseEntity<List<AvailabilitySlotResponse>> getMyAvailability(
-        @AuthenticationPrincipal UUID userId
+        @AuthenticationPrincipal(expression = "id") UUID userId
     ) {
         UUID providerId = getProviderIdForUser(userId);
         return ResponseEntity.ok(bookingService.getAvailabilitySlots(providerId.toString()));
@@ -105,7 +114,7 @@ public class BookingController {
 
     @PostMapping("/providers/self/availability")
     public ResponseEntity<AvailabilitySlotResponse> addAvailability(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody CreateAvailabilitySlotRequest request
     ) {
         UUID providerId = getProviderIdForUser(userId);
@@ -115,8 +124,11 @@ public class BookingController {
     }
 
     @DeleteMapping("/providers/self/availability/{slotId}")
-    public ResponseEntity<Void> removeAvailability(@PathVariable UUID slotId) {
-        bookingService.removeAvailabilitySlot(slotId);
+    public ResponseEntity<Void> removeAvailability(
+        @AuthenticationPrincipal(expression = "id") UUID userId,
+        @PathVariable UUID slotId
+    ) {
+        bookingService.removeAvailabilitySlot(slotId, userId);
         return ResponseEntity.ok().build();
     }
 

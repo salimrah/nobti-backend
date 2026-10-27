@@ -23,7 +23,7 @@ public class GiftCardController {
 
     @PostMapping("/purchase")
     public ResponseEntity<GiftCardResponse> purchaseGiftCard(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody PurchaseGiftCardRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -32,7 +32,7 @@ public class GiftCardController {
 
     @PostMapping("/redeem")
     public ResponseEntity<GiftCardResponse> redeemGiftCard(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody RedeemGiftCardRequest request
     ) {
         return ResponseEntity.ok(giftCardService.redeemGiftCard(userId, request.getCode()));
@@ -40,7 +40,7 @@ public class GiftCardController {
 
     @GetMapping("/my")
     public ResponseEntity<List<GiftCardResponse>> getMyPurchasedGifts(
-        @AuthenticationPrincipal UUID userId
+        @AuthenticationPrincipal(expression = "id") UUID userId
     ) {
         return ResponseEntity.ok(giftCardService.getMyPurchasedGifts(userId));
     }

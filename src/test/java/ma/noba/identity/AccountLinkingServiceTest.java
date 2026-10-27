@@ -62,7 +62,7 @@ class AccountLinkingServiceTest {
     @Test
     @DisplayName("Should link a new social account")
     void linkAccount_success() {
-        var profile = new SocialProfile("ext-123", "ext@test.com", "External User");
+        var profile = new SocialProfile("ext-123", "ext@test.com", "External User", true);
         when(socialVerifierService.verify(SocialProvider.GOOGLE, "valid-token")).thenReturn(profile);
         when(hashService.hash("google:ext-123")).thenReturn("hash-google-ext-123");
         when(identities.findByProviderTypeAndIdentifierHash("google", "hash-google-ext-123"))
@@ -81,7 +81,7 @@ class AccountLinkingServiceTest {
     @Test
     @DisplayName("Should throw when provider is already linked")
     void linkAccount_alreadyLinked() {
-        var profile = new SocialProfile("ext-123", "ext@test.com", "External User");
+        var profile = new SocialProfile("ext-123", "ext@test.com", "External User", true);
         when(socialVerifierService.verify(SocialProvider.GOOGLE, "token")).thenReturn(profile);
         when(hashService.hash("google:ext-123")).thenReturn("hash-google-ext-123");
         when(identities.findByProviderTypeAndIdentifierHash("google", "hash-google-ext-123"))
@@ -97,7 +97,7 @@ class AccountLinkingServiceTest {
     @Test
     @DisplayName("Should throw when user not found")
     void linkAccount_userNotFound() {
-        var profile = new SocialProfile("ext-123", "ext@test.com", "External User");
+        var profile = new SocialProfile("ext-123", "ext@test.com", "External User", true);
         when(socialVerifierService.verify(SocialProvider.GOOGLE, "token")).thenReturn(profile);
         when(hashService.hash("google:ext-123")).thenReturn("hash-google-ext-123");
         when(identities.findByProviderTypeAndIdentifierHash("google", "hash-google-ext-123"))

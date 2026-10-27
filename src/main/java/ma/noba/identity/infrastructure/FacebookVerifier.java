@@ -22,16 +22,19 @@ public class FacebookVerifier implements SocialProviderVerifier {
                 .uri("https://graph.facebook.com/me?fields=id,name,email&access_token={t}", token)
                 .retrieve()
                 .bodyToMono(Map.class)
-                .block(); // consider async in real high-load apps
+                // Bound the call so a slow/hanging Graph API request cannot tie up request threads.
+                .block(java.time.Duration.ofSeconds(5));
 
         if (me == null || me.get("id") == null) {
             throw new InvalidTokenException("Invalid Facebook access token");
         }
 
+        // Facebook only returns emails it has confirmed, so treat it as verified.
         return new SocialProfile(
                 (String) me.get("id"),
                 (String) me.get("email"),
-                (String) me.get("name")
+                (String) me.get("name"),
+                true
         );
     }
 

@@ -18,12 +18,14 @@ public class PromotionApplicationService {
 
     private final PromotionRepository promotionRepository;
 
+    @Transactional(readOnly = true)
     public List<PromotionResponse> getProviderPromotions(UUID providerId) {
         return promotionRepository.findByProviderId(providerId).stream()
             .map(PromotionApplicationService::toResponse)
             .toList();
     }
 
+    @Transactional(readOnly = true)
     public List<PromotionResponse> getActivePromotions(UUID providerId) {
         return promotionRepository.findValidPromotions(providerId, Instant.now()).stream()
             .map(PromotionApplicationService::toResponse)
@@ -46,9 +48,12 @@ public class PromotionApplicationService {
     }
 
     @Transactional
-    public void deactivatePromotion(UUID promotionId) {
+    public void deactivatePromotion(UUID promotionId, UUID providerId) {
         Promotion promotion = promotionRepository.findById(promotionId)
             .orElseThrow(() -> new IllegalArgumentException("Promotion not found: " + promotionId));
+        if (!promotion.getProviderId().equals(providerId)) {
+            throw new org.springframework.security.access.AccessDeniedException("Not the provider of this promotion");
+        }
         promotion.deactivate();
         promotionRepository.save(promotion);
     }

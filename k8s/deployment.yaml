@@ -58,6 +58,31 @@ spec:
                 secretKeyRef:
                   name: noba-backend-secrets
                   key: sentry-dsn
+            - name: RABBITMQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: noba-backend-secrets
+                  key: rabbitmq-username
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: noba-backend-secrets
+                  key: rabbitmq-password
+            - name: JWT_RSA_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: noba-backend-secrets
+                  key: jwt-rsa-private-key
+            - name: JWT_RSA_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: noba-backend-secrets
+                  key: jwt-rsa-public-key
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: noba-backend-secrets
+                  key: redis-password
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness

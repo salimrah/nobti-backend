@@ -163,6 +163,7 @@ class OtpServiceTest {
 
         when(repository.find(challengeId)).thenReturn(Optional.of(challenge));
         when(rateLimiter.tryConsume(anyString(), eq(1L))).thenReturn(true);
+        when(repository.incrementAttempts(eq(challengeId), any())).thenReturn(1);
         when(otpEncoder.matches(anyString(), anyString())).thenReturn(false);
         when(otpConfig.ttl()).thenReturn(Duration.ofMinutes(5));
         when(meterRegistry.counter(anyString(), anyString(), anyString())).thenReturn(counter);
@@ -170,7 +171,6 @@ class OtpServiceTest {
         assertThatThrownBy(() -> service.verify(challengeId, "wrong-code"))
                 .isInstanceOf(InvalidCodeException.class);
 
-        assertThat(challenge.getAttempts()).isEqualTo(1);
         verify(eventBus).publish(any(OtpFailedEvent.class));
     }
 
@@ -190,6 +190,8 @@ class OtpServiceTest {
 
         when(repository.find("challenge-1")).thenReturn(Optional.of(challenge));
         when(rateLimiter.tryConsume(anyString(), eq(1L))).thenReturn(true);
+        // Atomic counter returns a value beyond maxAttempts → exhausted.
+        when(repository.incrementAttempts(eq("challenge-1"), any())).thenReturn(6);
 
         assertThatThrownBy(() -> service.verify("challenge-1", "code"))
                 .isInstanceOf(AttemptsExhaustedException.class);

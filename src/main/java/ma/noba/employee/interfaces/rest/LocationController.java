@@ -25,20 +25,20 @@ public class LocationController {
     private final ProviderLookupPort providerLookupPort;
 
     @GetMapping
-    public ResponseEntity<List<LocationResponse>> getLocations(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<List<LocationResponse>> getLocations(@AuthenticationPrincipal(expression = "id") UUID userId) {
         UUID providerId = getProviderId(userId);
         return ResponseEntity.ok(locationService.getLocations(providerId));
     }
 
     @GetMapping("/active")
-    public ResponseEntity<List<LocationResponse>> getActiveLocations(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<List<LocationResponse>> getActiveLocations(@AuthenticationPrincipal(expression = "id") UUID userId) {
         UUID providerId = getProviderId(userId);
         return ResponseEntity.ok(locationService.getActiveLocations(providerId));
     }
 
     @PostMapping
     public ResponseEntity<LocationResponse> createLocation(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody CreateLocationRequest request
     ) {
         UUID providerId = getProviderId(userId);

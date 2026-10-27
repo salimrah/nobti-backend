@@ -62,22 +62,40 @@ public class Appointment {
     }
 
     public void confirm() {
+        if (status != AppointmentStatus.PENDING) {
+            throw new IllegalStateException("Only a pending appointment can be confirmed (was " + status + ")");
+        }
         this.status = AppointmentStatus.CONFIRMED;
         this.updatedAt = Instant.now();
     }
 
     public void complete() {
+        if (status != AppointmentStatus.CONFIRMED) {
+            throw new IllegalStateException("Only a confirmed appointment can be completed (was " + status + ")");
+        }
         this.status = AppointmentStatus.COMPLETED;
         this.updatedAt = Instant.now();
     }
 
     public void cancel() {
+        if (isFinished()) {
+            throw new IllegalStateException("A finished appointment cannot be cancelled (was " + status + ")");
+        }
         this.status = AppointmentStatus.CANCELLED;
         this.updatedAt = Instant.now();
     }
 
     public void markNoShow() {
+        if (isFinished()) {
+            throw new IllegalStateException("A finished appointment cannot be marked as no-show (was " + status + ")");
+        }
         this.status = AppointmentStatus.NO_SHOW;
         this.updatedAt = Instant.now();
+    }
+
+    private boolean isFinished() {
+        return status == AppointmentStatus.COMPLETED
+                || status == AppointmentStatus.CANCELLED
+                || status == AppointmentStatus.NO_SHOW;
     }
 }

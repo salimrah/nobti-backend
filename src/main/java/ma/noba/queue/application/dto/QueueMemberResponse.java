@@ -8,7 +8,9 @@ import java.time.Instant;
 public record QueueMemberResponse(
         String id,
         String clientId,
+        String clientName,
         String serviceId,
+        String serviceName,
         String employeeId,
         int position,
         QueueMemberStatus status,
@@ -18,5 +20,8 @@ public record QueueMemberResponse(
         double actualDurationMinutes,
         int estimatedWaitMinutes,
         String groupId,
-        int groupSize
+        int groupSize,
+        String providerId,
+        int queueSize,
+        WaitEstimate estimate
 ) {}

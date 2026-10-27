@@ -27,6 +27,9 @@ public interface ProviderRepository {
 
     Page<Provider> findByCategory(String category, Pageable pageable);
 
+    /** Server-side text search over active providers (name/description). */
+    Page<Provider> searchActive(String query, Pageable pageable);
+
     Page<ProviderDistanceProjection> findNearbyIds(double lat, double lon, double radiusKm, Pageable pageable);
 
     Page<ProviderDistanceProjection> findNearbyIdsWithPostGis(double lat, double lon, double radiusKm, Pageable pageable);

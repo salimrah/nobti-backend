@@ -10,6 +10,7 @@ import ma.noba.shared.domain.port.FcmTokenQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ public class ReminderNotificationJob {
 
     @Transactional
     @Scheduled(fixedRateString = "${reminder.notification.poll-interval-ms:900000}")
+    @SchedulerLock(name = "reminder-notification-sweep", lockAtMostFor = "15m", lockAtLeastFor = "1m")
     public void processDueReminders() {
         List<ServiceReminder> due = reminderRepository.findByActiveTrueAndNextReminderAtBefore(Instant.now());
         if (due.isEmpty()) return;

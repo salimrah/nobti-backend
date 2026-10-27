@@ -35,6 +35,72 @@ class ProviderIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
+    @Autowired
+    private ma.noba.provider.domain.port.service.ProviderRepository providerRepository;
+
+    @Test
+    @DisplayName("Free-text search finds active providers by name")
+    void searchFindsActiveProviderByName() {
+        String token = "zzsearch" + UUID.randomUUID().toString().substring(0, 6);
+        String name = "Salon " + token;
+        var provider = ma.noba.provider.domain.model.Provider.create(UUID.randomUUID(), name, "Haircut");
+        provider.setStatus(ma.noba.provider.domain.model.ProviderStatus.ACTIVE);
+        providerRepository.save(provider);
+
+        // Sanity check at the repository level first (isolates query vs HTTP).
+        assertThat(providerRepository.searchActive(token,
+                org.springframework.data.domain.PageRequest.of(0, 50)).getContent()).isNotEmpty();
+
+        ResponseEntity<Map> response = restTemplate.getForEntity(
+                baseUrl() + "/providers/search?q=" + token + "&size=50", Map.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> content = (List<Map<String, Object>>) response.getBody().get("content");
+        assertThat(content).anyMatch(m -> name.equals(m.get("name")));
+    }
+
+    @Test
+    @DisplayName("Free-text search finds active providers by description only")
+    void searchFindsActiveProviderByDescription() {
+        // The token appears only in the description, so name-only matching (the old behaviour) would
+        // miss it as long as no other active provider's name matches.
+        String token = "zzdesc" + UUID.randomUUID().toString().substring(0, 6);
+        var provider = ma.noba.provider.domain.model.Provider.create(UUID.randomUUID(), "Generic Shop", "Haircut");
+        provider.setDescription("Specialises in " + token + " treatments");
+        provider.setStatus(ma.noba.provider.domain.model.ProviderStatus.ACTIVE);
+        providerRepository.save(provider);
+
+        var results = providerRepository.searchActive(token,
+                org.springframework.data.domain.PageRequest.of(0, 50)).getContent();
+
+        assertThat(results)
+                .extracting(ma.noba.provider.domain.model.Provider::getName)
+                .contains("Generic Shop");
+    }
+
+    @Test
+    @DisplayName("Name matches rank above description-only matches")
+    void searchRanksNameMatchesFirst() {
+        String token = "zzrank" + UUID.randomUUID().toString().substring(0, 6);
+
+        var nameMatch = ma.noba.provider.domain.model.Provider.create(UUID.randomUUID(), "Shop " + token, "Haircut");
+        nameMatch.setStatus(ma.noba.provider.domain.model.ProviderStatus.ACTIVE);
+        providerRepository.save(nameMatch);
+
+        // Saved second, so only a relevance ranking (not created-at) can put the name match first.
+        var descMatch = ma.noba.provider.domain.model.Provider.create(UUID.randomUUID(), "Other Place", "Haircut");
+        descMatch.setDescription("We offer " + token + " services");
+        descMatch.setStatus(ma.noba.provider.domain.model.ProviderStatus.ACTIVE);
+        providerRepository.save(descMatch);
+
+        var results = providerRepository.searchActive(token,
+                org.springframework.data.domain.PageRequest.of(0, 50)).getContent();
+
+        assertThat(results).isNotEmpty();
+        assertThat(results.get(0).getName()).isEqualTo("Shop " + token);
+    }
+
     private String accessToken;
     private UUID providerId;
 
@@ -57,7 +123,9 @@ class ProviderIntegrationTest extends AbstractIntegrationTest {
     private void signupAndLogin() {
         String email = "provider-test-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
         SignupRequest signupRequest = new SignupRequest(email, "ProviderTest123!", "Provider", "Tester");
-        restTemplate.postForEntity(baseUrl() + "/auth/signup", signupRequest, Map.class);
+        ResponseEntity<Map> signupResponse = restTemplate.postForEntity(baseUrl() + "/auth/signup", signupRequest, Map.class);
+        assertThat(signupResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        verifyEmail(UUID.fromString((String) signupResponse.getBody().get("userId")));
 
         PasswordAuthRequest loginRequest = new PasswordAuthRequest(email, "ProviderTest123!", null);
         ResponseEntity<Map> loginResponse = restTemplate.postForEntity(baseUrl() + "/auth/login", loginRequest, Map.class);
@@ -92,7 +160,7 @@ class ProviderIntegrationTest extends AbstractIntegrationTest {
 
         assertThat(meResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(meResponse.getBody()).isNotNull();
-        Set<String> roles = (Set<String>) meResponse.getBody().get("roles");
+        List<String> roles = (List<String>) meResponse.getBody().get("roles");
         assertThat(roles).contains("USER", "PROVIDER");
     }
 
@@ -111,17 +179,16 @@ class ProviderIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should get provider by ID")
-    void getProviderById() {
+    @DisplayName("A pending provider is not exposed by public discovery")
+    void getProviderById_hidesPendingProvider() {
+        // Newly created providers are PENDING; public discovery must return 404 (not leak the
+        // record or its coordinates). The owner still sees it via /providers/self.
         ResponseEntity<ProviderResponse> response = restTemplate.getForEntity(
                 baseUrl() + "/providers/" + providerId,
                 ProviderResponse.class
         );
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        ProviderResponse body = response.getBody();
-        assertThat(body).isNotNull();
-        assertThat(body.name()).isEqualTo("Integration Test Provider");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
@@ -219,9 +286,10 @@ class ProviderIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("Should get nearby providers")
     void getNearbyProviders() {
-        ResponseEntity<List> response = restTemplate.getForEntity(
+        // /providers/nearby returns a paged object, not a bare array.
+        ResponseEntity<Map> response = restTemplate.getForEntity(
                 baseUrl() + "/providers/nearby?lat=33.5731&lon=-7.5898&radiusKm=10",
-                List.class
+                Map.class
         );
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -230,8 +298,10 @@ class ProviderIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("Should get service categories")
     void getCategories() {
-        ResponseEntity<List> response = restTemplate.getForEntity(
+        ResponseEntity<List> response = restTemplate.exchange(
                 baseUrl() + "/providers/self/categories",
+                HttpMethod.GET,
+                new HttpEntity<>(authHeaders()),
                 List.class
         );
 

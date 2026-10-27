@@ -25,7 +25,7 @@ public class PackageController {
 
     @PostMapping("/api/v1/providers/self/packages")
     public ResponseEntity<PackageResponse> createPackage(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody CreatePackageRequest request
     ) {
         UUID providerId = getProviderId(userId);
@@ -39,22 +39,26 @@ public class PackageController {
     }
 
     @GetMapping("/api/v1/providers/self/packages")
-    public ResponseEntity<List<PackageResponse>> getMyPackages(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<List<PackageResponse>> getMyPackages(@AuthenticationPrincipal(expression = "id") UUID userId) {
         UUID providerId = getProviderId(userId);
         return ResponseEntity.ok(packageService.getProviderPackages(providerId));
     }
 
     @PutMapping("/api/v1/providers/self/packages/{id}")
     public ResponseEntity<PackageResponse> updatePackage(
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @PathVariable UUID id,
         @Valid @RequestBody UpdatePackageRequest request
     ) {
-        return ResponseEntity.ok(packageService.updatePackage(id, request));
+        return ResponseEntity.ok(packageService.updatePackage(id, getProviderId(userId), request));
     }
 
     @DeleteMapping("/api/v1/providers/self/packages/{id}")
-    public ResponseEntity<Void> deactivatePackage(@PathVariable UUID id) {
-        packageService.deactivatePackage(id);
+    public ResponseEntity<Void> deactivatePackage(
+        @AuthenticationPrincipal(expression = "id") UUID userId,
+        @PathVariable UUID id
+    ) {
+        packageService.deactivatePackage(id, getProviderId(userId));
         return ResponseEntity.ok().build();
     }
 

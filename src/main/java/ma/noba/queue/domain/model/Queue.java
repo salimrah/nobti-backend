@@ -101,14 +101,32 @@ public class Queue {
         return member;
     }
 
-    public void removeMember(UUID memberId) {
+    /**
+     * Removes (cancels) a member. If the member being served leaves or no-shows, the next waiting
+     * client is promoted so the queue does not stall until the provider manually advances.
+     *
+     * @return the promoted member, if one was activated, so the caller can notify them.
+     */
+    public Optional<QueueMember> removeMember(UUID memberId) {
         ensureActive();
         boolean removed = members.removeIf(m -> m.getId().equals(memberId) && m.cancel());
         if (!removed) {
             throw new IllegalArgumentException("Queue member not found or cannot be cancelled");
         }
+        Optional<QueueMember> promoted = Optional.empty();
+        boolean stillServing = members.stream().anyMatch(m -> m.getStatus() == QueueMemberStatus.ACTIVE);
+        if (!stillServing) {
+            Optional<QueueMember> next = members.stream()
+                    .filter(m -> m.getStatus() == QueueMemberStatus.WAITING || m.getStatus() == QueueMemberStatus.NOTIFIED)
+                    .min(Comparator.comparingInt(QueueMember::getPosition));
+            if (next.isPresent()) {
+                next.get().activate();
+                promoted = next;
+            }
+        }
         recalculatePositions();
         this.updatedAt = Instant.now();
+        return promoted;
     }
 
     public void advanceToNext() {
@@ -185,7 +203,10 @@ public class Queue {
     }
 
     private void recalculatePositions() {
-        Comparator<QueueMember> byPriority = Comparator.comparingInt(m -> m.getPriority().ordinal());
+        // Higher-priority members (EMERGENCY > URGENT > NORMAL) must come first, matching the
+        // insertion order established by addMember. Ordinal is ascending (NORMAL=0, EMERGENCY=2),
+        // so negate it to sort descending.
+        Comparator<QueueMember> byPriority = Comparator.comparingInt((QueueMember m) -> -m.getPriority().ordinal());
         List<QueueMember> active = members.stream()
                 .filter(QueueMember::isActive)
                 .sorted(byPriority.thenComparingInt(QueueMember::getPosition))
@@ -201,6 +222,16 @@ public class Queue {
             } else if (member.getStatus() == QueueMemberStatus.ACTIVE && member.getEstimatedStartTime() != null) {
                 nextStart = nextStart.plus(member.getEstimatedDuration());
             }
+        }
+
+        // Completed/cancelled members are renumbered after the active ones so that
+        // (queue_id, position) remains unique once the transaction is flushed.
+        int nextPosition = active.size() + 1;
+        for (QueueMember member : members.stream()
+                .filter(m -> !m.isActive())
+                .sorted(Comparator.comparingInt(QueueMember::getPosition))
+                .toList()) {
+            member.setPosition(nextPosition++);
         }
     }
 

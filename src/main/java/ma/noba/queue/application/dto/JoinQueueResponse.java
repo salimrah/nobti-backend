@@ -10,5 +10,6 @@ public record JoinQueueResponse(
         int position,
         QueuePriority priority,
         Instant estimatedStartTime,
-        int estimatedWaitMinutes
+        int estimatedWaitMinutes,
+        WaitEstimate estimate
 ) {}

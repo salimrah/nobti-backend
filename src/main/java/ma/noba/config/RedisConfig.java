@@ -98,7 +98,9 @@ public class RedisConfig {
                 .build();
         var mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
-        mapper.activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.NON_FINAL);
+        // EVERYTHING (not NON_FINAL): records and immutable lists are final, so NON_FINAL omitted
+        // their type id and the cache could not deserialize its own output.
+        mapper.activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.EVERYTHING);
         return mapper;
     }
 

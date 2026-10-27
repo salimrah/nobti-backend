@@ -37,6 +37,59 @@ public interface JpaProviderRepository extends JpaRepository<Provider, UUID>, Pr
     @Query("SELECT p FROM Provider p WHERE p.status = 'ACTIVE'")
     Page<Provider> findByActiveOnlyPage(Pageable pageable);
 
+    @EntityGraph(attributePaths = {"services"})
+    Page<Provider> findByNameContainingIgnoreCaseAndStatus(String name, ProviderStatus status, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"services"})
+    Page<Provider> findByDescriptionContainingIgnoreCaseAndStatus(String description, ProviderStatus status, Pageable pageable);
+
+    @Override
+    default Page<Provider> searchActive(String query, Pageable pageable) {
+        if (query == null || query.isBlank()) {
+            return findByActiveOnlyPage(pageable);
+        }
+        String q = query.trim();
+        // Postgres full-text over name + description, ranked (name weighted above description).
+        Page<Provider> fullText = searchFullText(q, pageable);
+        if (fullText.hasContent()) {
+            return fullText;
+        }
+        // Fallback for stopword-only / very short queries that produce an empty tsquery.
+        Page<Provider> byName = findByNameContainingIgnoreCaseAndStatus(q, ProviderStatus.ACTIVE, pageable);
+        if (byName.hasContent()) {
+            return byName;
+        }
+        return findByDescriptionContainingIgnoreCaseAndStatus(q, ProviderStatus.ACTIVE, pageable);
+    }
+
+    /**
+     * Full-text search over a weighted vector: name is weighted 'A' and description 'B', so a name
+     * match outranks a description-only match. The vector is derived from existing columns (no stored
+     * column needed), so the same query works against both the Flyway schema and the test schema.
+     */
+    @Query(nativeQuery = true,
+            value = """
+                    SELECT p.* FROM provider p
+                    WHERE p.status = 'ACTIVE'
+                      AND (setweight(to_tsvector('simple', coalesce(p.name, '')), 'A')
+                           || setweight(to_tsvector('simple', coalesce(p.description, '')), 'B'))
+                          @@ websearch_to_tsquery('simple', :query)
+                    ORDER BY ts_rank(
+                               setweight(to_tsvector('simple', coalesce(p.name, '')), 'A')
+                               || setweight(to_tsvector('simple', coalesce(p.description, '')), 'B'),
+                               websearch_to_tsquery('simple', :query)
+                             ) DESC,
+                             p.created_at DESC
+                    """,
+            countQuery = """
+                    SELECT count(*) FROM provider p
+                    WHERE p.status = 'ACTIVE'
+                      AND (setweight(to_tsvector('simple', coalesce(p.name, '')), 'A')
+                           || setweight(to_tsvector('simple', coalesce(p.description, '')), 'B'))
+                          @@ websearch_to_tsquery('simple', :query)
+                    """)
+    Page<Provider> searchFullText(@Param("query") String query, Pageable pageable);
+
     @Query("SELECT p FROM Provider p WHERE p.status = :status ORDER BY p.createdAt DESC")
     List<Provider> findByStatusString(@Param("status") String status);
 

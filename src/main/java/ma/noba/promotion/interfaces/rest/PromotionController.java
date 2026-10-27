@@ -29,14 +29,14 @@ public class PromotionController {
     }
 
     @GetMapping("/providers/self/promotions")
-    public ResponseEntity<List<PromotionResponse>> getMyPromotions(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<List<PromotionResponse>> getMyPromotions(@AuthenticationPrincipal(expression = "id") UUID userId) {
         UUID providerId = getProviderIdForUser(userId);
         return ResponseEntity.ok(promotionService.getProviderPromotions(providerId));
     }
 
     @PostMapping("/providers/self/promotions")
     public ResponseEntity<PromotionResponse> createPromotion(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody CreatePromotionRequest request
     ) {
         UUID providerId = getProviderIdForUser(userId);
@@ -45,8 +45,11 @@ public class PromotionController {
     }
 
     @DeleteMapping("/promotions/{promotionId}")
-    public ResponseEntity<Void> deactivatePromotion(@PathVariable UUID promotionId) {
-        promotionService.deactivatePromotion(promotionId);
+    public ResponseEntity<Void> deactivatePromotion(
+        @AuthenticationPrincipal(expression = "id") UUID userId,
+        @PathVariable UUID promotionId
+    ) {
+        promotionService.deactivatePromotion(promotionId, getProviderIdForUser(userId));
         return ResponseEntity.ok().build();
     }
 

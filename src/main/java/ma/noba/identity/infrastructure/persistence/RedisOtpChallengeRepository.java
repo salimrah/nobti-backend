@@ -18,6 +18,7 @@ public class RedisOtpChallengeRepository implements OtpChallengeRepository {
     private final RedisTemplate<String, Object> redis;
 
     private String key(String id){ return "otp:challenge:" + id; }
+    private String attemptsKey(String id){ return "otp:attempts:" + id; }
 
     @Override
     public void save(OtpChallenge challenge, Duration ttl) {
@@ -33,6 +34,14 @@ public class RedisOtpChallengeRepository implements OtpChallengeRepository {
 
     @Override
     public boolean delete(String id) {
+        redis.delete(attemptsKey(id));
         return Boolean.TRUE.equals(redis.delete(key(id)));
+    }
+
+    @Override
+    public int incrementAttempts(String id, Duration ttl) {
+        Long value = redis.opsForValue().increment(attemptsKey(id));
+        redis.expire(attemptsKey(id), ttl);
+        return value == null ? 0 : value.intValue();
     }
 }

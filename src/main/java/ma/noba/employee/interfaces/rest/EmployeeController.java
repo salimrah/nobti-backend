@@ -26,14 +26,14 @@ public class EmployeeController {
     private final ProviderLookupPort providerLookupPort;
 
     @GetMapping
-    public ResponseEntity<List<EmployeeResponse>> getEmployees(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<List<EmployeeResponse>> getEmployees(@AuthenticationPrincipal(expression = "id") UUID userId) {
         UUID providerId = getProviderId(userId);
         return ResponseEntity.ok(employeeService.getEmployees(providerId));
     }
 
     @PostMapping
     public ResponseEntity<EmployeeResponse> addEmployee(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody CreateEmployeeRequest request
     ) {
         UUID providerId = getProviderId(userId);

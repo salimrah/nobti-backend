@@ -24,7 +24,7 @@ public class ProviderNetworkController {
 
     @PostMapping("/api/v1/providers/self/network")
     public ResponseEntity<NetworkPartnerResponse> addPartner(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody AddNetworkPartnerRequest request
     ) {
         UUID providerId = getProviderId(userId);
@@ -38,7 +38,7 @@ public class ProviderNetworkController {
     }
 
     @GetMapping("/api/v1/providers/self/network")
-    public ResponseEntity<List<NetworkPartnerResponse>> getMyNetwork(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<List<NetworkPartnerResponse>> getMyNetwork(@AuthenticationPrincipal(expression = "id") UUID userId) {
         UUID providerId = getProviderId(userId);
         return ResponseEntity.ok(networkService.getNetworkPartners(providerId));
     }

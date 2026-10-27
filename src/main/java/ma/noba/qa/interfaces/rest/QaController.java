@@ -25,7 +25,7 @@ public class QaController {
 
     @PostMapping("/providers/{id}/questions")
     public ResponseEntity<QuestionResponse> askQuestion(
-            @AuthenticationPrincipal UUID userId,
+            @AuthenticationPrincipal(expression = "id") UUID userId,
             @PathVariable("id") UUID providerId,
             @Valid @RequestBody AskQuestionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)

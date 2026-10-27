@@ -2,16 +2,29 @@ name: CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
 
 env:
   REGISTRY: ${{ secrets.DOCKERHUB_USERNAME || 'docker.io' }}
   IMAGE_NAME: noba-backend
 
 jobs:
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build:
+    needs: secret-scan
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -59,15 +72,14 @@ jobs:
           SPRING_DATA_REDIS_URL: redis://localhost:6379
 
       - name: Run Integration Tests (Docker)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: ./mvnw test -Dgroups="docker"
+        run: ./mvnw test -Dgroups=docker -DexcludedGroups=
         env:
           TESTCONTAINERS_RYUK_DISABLED: "true"
 
   docker:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     
     steps:
       - uses: actions/checkout@v4
@@ -103,7 +115,7 @@ jobs:
   deploy-staging:
     needs: docker
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     environment: staging
     
     steps:
@@ -191,7 +203,7 @@ jobs:
   deploy-production:
     needs: deploy-staging
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     environment: production
     concurrency: production
     

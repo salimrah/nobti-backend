@@ -25,10 +25,15 @@ Thumbs.db
 .env.*
 !.env.example
 serviceAccountKey.json
-*.p12
-*.pem
 credentials.json
 client_secret*.json
+*.p12
+*.pem
+*.key
+*.jks
+*.keystore
+google-services.json
+GoogleService-Info.plist
 
 # OpenCode local tooling (not for remote)
 .opencode/

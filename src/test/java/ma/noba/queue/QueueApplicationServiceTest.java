@@ -42,7 +42,12 @@ class QueueApplicationServiceTest {
     @Mock QueueNotificationPort notificationPort;
     @Mock EventBus eventBus;
     @Mock BusinessHoursPort businessHoursPort;
+    @Mock ma.noba.queue.domain.port.service.ProviderQueuePolicyPort queuePolicy;
     @Mock QueueScheduler queueScheduler;
+    @Mock ma.noba.queue.domain.port.service.ClientDisplayNamePort clientDisplayNamePort;
+    @Mock ma.noba.queue.application.service.QueueWebSocketService queueWebSocketService;
+    @Mock ma.noba.queue.application.service.QueueWaitlistApplicationService waitlistService;
+    @Mock ma.noba.queue.domain.port.service.ProviderServiceNamePort serviceNamePort;
 
     private QueueApplicationService service;
     private UUID providerId;
@@ -50,8 +55,11 @@ class QueueApplicationServiceTest {
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.lenient().when(queuePolicy.policy(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new ma.noba.queue.domain.port.service.ProviderQueuePolicyPort.QueuePolicy(10, true));
         service = new QueueApplicationService(queueRepository, memberRepository,
-                durationEstimator, notificationPort, eventBus, businessHoursPort, queueScheduler);
+                durationEstimator, notificationPort, eventBus, businessHoursPort, queuePolicy, queueScheduler,
+                clientDisplayNamePort, serviceNamePort, queueWebSocketService, waitlistService);
         providerId = UUID.randomUUID();
         clientId = UUID.randomUUID();
     }
@@ -179,6 +187,24 @@ class QueueApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("Mark no-show — removes the member and promotes the next")
+    void markNoShowPromotesNext() {
+        var queue = createQueue();
+        var first = addMember(queue, clientId);
+        var second = addMember(queue, UUID.randomUUID());
+        queue.advanceToNext(); // first becomes ACTIVE (serving)
+
+        when(queueRepository.findByProviderId(providerId)).thenReturn(Optional.of(queue));
+        when(queueRepository.save(any(Queue.class))).thenReturn(queue);
+
+        service.markNoShow(providerId, first.getId());
+
+        assertThat(queue.getActiveMembers()).extracting(QueueMember::getId).contains(second.getId());
+        assertThat(queue.getActiveMembers()).extracting(QueueMember::getStatus).contains(QueueMemberStatus.ACTIVE);
+        verify(eventBus, atLeastOnce()).publish(any());
+    }
+
+    @Test
     @DisplayName("Pause queue — sets status to PAUSED")
     void pauseQueue_success() {
         var queue = createQueue();
@@ -216,6 +242,20 @@ class QueueApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("Queue members expose the client display name (not a raw id)")
+    void queueMembersIncludeClientName() {
+        var queue = createQueue();
+        addMember(queue, clientId);
+        when(queueRepository.findByProviderId(providerId)).thenReturn(Optional.of(queue));
+        when(clientDisplayNamePort.findDisplayNames(any())).thenReturn(java.util.Map.of(clientId, "Amine"));
+
+        var result = service.getQueueMembers(providerId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).clientName()).isEqualTo("Amine");
+    }
+
+    @Test
     @DisplayName("Get queue status — returns status summary")
     void getQueueStatus_success() {
         var queue = createQueue();
@@ -236,5 +276,27 @@ class QueueApplicationServiceTest {
         assertThatThrownBy(() -> service.getQueueStatus(providerId))
                 .isInstanceOf(NotFoundException.class)
                 .matches(e -> ((NotFoundException) e).getErrorCode() == ErrorCode.QUEUE_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("Join is rejected when the party exceeds the provider's max party size")
+    void joinQueue_rejectsPartyOverMax() {
+        when(businessHoursPort.isOpenNow(providerId)).thenReturn(true);
+        when(queuePolicy.policy(providerId))
+                .thenReturn(new ma.noba.queue.domain.port.service.ProviderQueuePolicyPort.QueuePolicy(2, true));
+
+        assertThatThrownBy(() -> service.joinQueue(providerId, clientId, null, null, null, 5))
+                .isInstanceOf(ValidationException.class);
+    }
+
+    @Test
+    @DisplayName("Join is rejected when walk-ins are disabled for the provider")
+    void joinQueue_rejectsWhenWalkInsDisabled() {
+        when(businessHoursPort.isOpenNow(providerId)).thenReturn(true);
+        when(queuePolicy.policy(providerId))
+                .thenReturn(new ma.noba.queue.domain.port.service.ProviderQueuePolicyPort.QueuePolicy(10, false));
+
+        assertThatThrownBy(() -> service.joinQueue(providerId, clientId, null, null, null, 1))
+                .isInstanceOf(ValidationException.class);
     }
 }

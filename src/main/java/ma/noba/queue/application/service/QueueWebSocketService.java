@@ -3,6 +3,7 @@ package ma.noba.queue.application.service;
 import ma.noba.queue.domain.event.ClientJoinedQueueEvent;
 import ma.noba.queue.domain.event.ClientLeftQueueEvent;
 import ma.noba.queue.domain.event.ClientTurnStartedEvent;
+import ma.noba.queue.domain.model.QueueStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -10,6 +11,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class QueueWebSocketService {
@@ -56,5 +58,16 @@ public class QueueWebSocketService {
                 "queueId", event.queueId().toString()
         ));
         log.debug("WebSocket turn notification sent to {}", clientTopic);
+    }
+
+    /** Broadcasts a queue status change (pause/resume/close) so clients update immediately. */
+    public void broadcastQueueStatus(UUID providerId, QueueStatus status) {
+        String topic = "/topic/queues/" + providerId;
+        messagingTemplate.convertAndSend(topic, Map.of(
+                "event", "queue.status",
+                "providerId", providerId.toString(),
+                "status", status.name()
+        ));
+        log.debug("WebSocket queue status sent to {} ({})", topic, status);
     }
 }

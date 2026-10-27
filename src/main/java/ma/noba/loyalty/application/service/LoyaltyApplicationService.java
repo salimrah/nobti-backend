@@ -10,6 +10,7 @@ import ma.noba.loyalty.domain.port.LoyaltyPointsRepository;
 import ma.noba.loyalty.domain.port.LoyaltyRedemptionRepository;
 import ma.noba.loyalty.domain.port.LoyaltyRewardRepository;
 import ma.noba.loyalty.infra.JpaLoyaltyPointsTransactionRepository;
+import ma.noba.payment.domain.port.ProviderLookupPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,12 @@ public class LoyaltyApplicationService {
     private final JpaLoyaltyPointsTransactionRepository txnRepository;
     private final LoyaltyRewardRepository rewardRepository;
     private final LoyaltyRedemptionRepository redemptionRepository;
+    private final ProviderLookupPort providerLookupPort;
+
+    /** Provider display name, falling back to the id only if the provider cannot be resolved. */
+    private String providerName(UUID providerId) {
+        return providerLookupPort.findProviderName(providerId).orElse(providerId.toString());
+    }
 
     public MyLoyaltyResponse getMyLoyalty(UUID userId) {
         List<LoyaltyPoints> allPoints = pointsRepository.findByUserId(userId);
@@ -38,7 +45,7 @@ public class LoyaltyApplicationService {
                     .toList();
 
                 return new LoyaltyResponse(
-                    lp.getProviderId().toString(), lp.getProviderId().toString(), lp.getTotalPoints(),
+                    lp.getProviderId().toString(), providerName(lp.getProviderId()), lp.getTotalPoints(),
                     lp.getTier(),
                     rewards.stream().map(r -> new LoyaltyRewardResponse(
                         r.getId().toString(), r.getProviderId().toString(),
@@ -73,7 +80,7 @@ public class LoyaltyApplicationService {
             .toList();
 
         return new LoyaltyResponse(
-            providerId.toString(), providerId.toString(), lp.getTotalPoints(), lp.getTier(),
+            providerId.toString(), providerName(providerId), lp.getTotalPoints(), lp.getTier(),
             rewards.stream().map(r -> new LoyaltyRewardResponse(
                 r.getId().toString(), r.getProviderId().toString(),
                 r.getName(), r.getDescription(), r.getPointsRequired(),
@@ -85,11 +92,11 @@ public class LoyaltyApplicationService {
 
     @Transactional
     public void awardPoints(UUID userId, UUID providerId, int points, String reason, UUID referenceId) {
-        LoyaltyPoints lp = pointsRepository.findByUserIdAndProviderId(userId, providerId)
-            .orElseGet(() -> pointsRepository.save(new LoyaltyPoints(userId, providerId)));
-
-        lp.addPoints(points);
-        pointsRepository.save(lp);
+        if (points <= 0) {
+            return;
+        }
+        // Atomic upsert-increment — safe under concurrency and creates the row if absent.
+        pointsRepository.addPoints(userId, providerId, points);
 
         LoyaltyPointsTransaction txn = new LoyaltyPointsTransaction(userId, providerId, points, reason, referenceId);
         txnRepository.save(txn);
@@ -104,11 +111,12 @@ public class LoyaltyApplicationService {
             throw new IllegalStateException("Reward is no longer available");
         }
 
-        LoyaltyPoints lp = pointsRepository.findByUserIdAndProviderId(userId, reward.getProviderId())
-            .orElseThrow(() -> new IllegalStateException("No loyalty points for this provider"));
-
-        lp.deductPoints(reward.getPointsRequired());
-        pointsRepository.save(lp);
+        // Atomic conditional decrement: two concurrent redemptions cannot both pass a balance check.
+        int updated = pointsRepository.deductPointsIfSufficient(
+            userId, reward.getProviderId(), reward.getPointsRequired());
+        if (updated == 0) {
+            throw new IllegalStateException("Insufficient loyalty points");
+        }
 
         LoyaltyPointsTransaction txn = new LoyaltyPointsTransaction(
             userId, reward.getProviderId(), -reward.getPointsRequired(),
@@ -139,9 +147,12 @@ public class LoyaltyApplicationService {
     }
 
     @Transactional
-    public void deactivateReward(UUID rewardId) {
+    public void deactivateReward(UUID rewardId, UUID providerId) {
         LoyaltyReward reward = rewardRepository.findById(rewardId)
             .orElseThrow(() -> new IllegalArgumentException("Reward not found: " + rewardId));
+        if (!reward.getProviderId().equals(providerId)) {
+            throw new org.springframework.security.access.AccessDeniedException("Not the provider of this reward");
+        }
         reward.deactivate();
         rewardRepository.save(reward);
     }

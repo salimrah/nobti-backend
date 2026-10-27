@@ -4,6 +4,7 @@ import ma.noba.identity.domain.repository.RefreshTokenRepository;
 import ma.noba.identity.infrastructure.config.JwtTokenProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ public class RefreshTokenCleanupJob {
     }
 
     @Scheduled(cron = "0 0 4 * * *")
+    @SchedulerLock(name = "refresh-token-cleanup-expired", lockAtMostFor = "1h", lockAtLeastFor = "1m")
     @Transactional
     public void cleanupExpiredTokens() {
         Instant cutoff = Instant.now();
@@ -34,6 +36,7 @@ public class RefreshTokenCleanupJob {
     }
 
     @Scheduled(cron = "0 30 4 * * *")
+    @SchedulerLock(name = "refresh-token-cleanup-idle", lockAtMostFor = "1h", lockAtLeastFor = "1m")
     @Transactional
     public void cleanupIdleTokens() {
         int idleDays = props.jwt.idleTimeoutDays;

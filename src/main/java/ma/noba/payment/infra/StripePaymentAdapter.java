@@ -10,7 +10,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -18,6 +20,14 @@ import java.util.UUID;
 @Component
 @ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText('${app.stripe.secret-key:}')")
 public class StripePaymentAdapter implements StripePaymentPort {
+
+    /**
+     * Converts a major-unit amount to Stripe minor units, rounding to 2 decimals half-up and
+     * rejecting lossy conversions instead of silently truncating.
+     */
+    static long toMinorUnits(BigDecimal amount) {
+        return amount.setScale(2, RoundingMode.HALF_UP).movePointRight(2).longValueExact();
+    }
 
     @Override
     public String createPaymentIntent(PaymentTransaction transaction, String customerEmail, String returnUrl) {
@@ -28,8 +38,8 @@ public class StripePaymentAdapter implements StripePaymentPort {
             metadata.put("user_id", transaction.getUserId().toString());
 
             PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
-                .setAmount(transaction.getAmount().multiply(new BigDecimal("100")).longValue())
-                .setCurrency(transaction.getCurrency().toLowerCase())
+                .setAmount(toMinorUnits(transaction.getAmount()))
+                .setCurrency(transaction.getCurrency().toLowerCase(Locale.ROOT))
                 .putAllMetadata(metadata)
                 .setAutomaticPaymentMethods(
                     PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
@@ -54,7 +64,7 @@ public class StripePaymentAdapter implements StripePaymentPort {
         try {
             RefundCreateParams params = RefundCreateParams.builder()
                 .setPaymentIntent(stripePaymentIntentId)
-                .setAmount(amount.multiply(new BigDecimal("100")).longValue())
+                .setAmount(toMinorUnits(amount))
                 .build();
 
             Refund.create(params);
@@ -93,26 +103,61 @@ public class StripePaymentAdapter implements StripePaymentPort {
     }
 
     @Override
-    public void transferToProvider(String stripePaymentIntentId, String stripeAccountId, BigDecimal amount) {
+    public String transferToProvider(String sourceChargeId, String stripeAccountId, BigDecimal amount, String currency) {
         try {
-            Long amountInCents = amount.multiply(new BigDecimal("100")).longValue();
-            if (amountInCents <= 0) {
-                log.warn("Skipping zero/negative transfer for PI: {}", stripePaymentIntentId);
-                return;
+            long amountInMinorUnits = toMinorUnits(amount);
+            if (amountInMinorUnits <= 0) {
+                log.warn("Skipping zero/negative transfer to account {}", stripeAccountId);
+                return null;
             }
 
-            TransferCreateParams params = TransferCreateParams.builder()
-                .setAmount(amountInCents)
-                .setCurrency("usd")
-                .setDestination(stripeAccountId)
-                .setSourceTransaction(stripePaymentIntentId)
-                .build();
+            TransferCreateParams.Builder builder = TransferCreateParams.builder()
+                .setAmount(amountInMinorUnits)
+                .setCurrency(currency.toLowerCase(Locale.ROOT))
+                .setDestination(stripeAccountId);
 
-            Transfer.create(params);
-            log.info("Transfer of {} to {} for PI: {}", amount, stripeAccountId, stripePaymentIntentId);
+            // A transfer's source must be a charge (not a PaymentIntent), and it must be in the
+            // same currency as the charge.
+            if (sourceChargeId != null && !sourceChargeId.isBlank()) {
+                builder.setSourceTransaction(sourceChargeId);
+            }
+
+            Transfer transfer = Transfer.create(builder.build());
+            log.info("Transfer {} of {} {} to {} (charge {})",
+                transfer.getId(), amount, currency, stripeAccountId, sourceChargeId);
+            return transfer.getId();
         } catch (StripeException e) {
             log.error("Failed to transfer to provider account: {}", stripeAccountId, e);
             throw new RuntimeException("Failed to transfer to provider: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public boolean accountPayoutsEnabled(String stripeAccountId) {
+        try {
+            Account account = Account.retrieve(stripeAccountId);
+            return Boolean.TRUE.equals(account.getPayoutsEnabled());
+        } catch (StripeException e) {
+            log.error("Failed to verify Stripe account: {}", stripeAccountId, e);
+            return false;
+        }
+    }
+
+    @Override
+    public void reverseProviderTransfer(String stripeTransferId, BigDecimal amount) {
+        try {
+            long amountInMinorUnits = toMinorUnits(amount);
+            if (amountInMinorUnits <= 0) {
+                log.warn("Skipping zero/negative transfer reversal for transfer {}", stripeTransferId);
+                return;
+            }
+            Map<String, Object> params = new HashMap<>();
+            params.put("amount", amountInMinorUnits);
+            TransferReversal reversal = Transfer.retrieve(stripeTransferId).getReversals().create(params);
+            log.info("Reversed transfer {} by {} (reversal {})", stripeTransferId, amount, reversal.getId());
+        } catch (StripeException e) {
+            log.error("Failed to reverse transfer {}", stripeTransferId, e);
+            throw new RuntimeException("Failed to reverse transfer: " + e.getMessage(), e);
         }
     }
 }

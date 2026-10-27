@@ -17,6 +17,8 @@ public enum ErrorCode {
     OTP_EXPIRED("OTP_002"),
     OTP_RATE_LIMIT_EXCEEDED("OTP_003"),
     OTP_ALREADY_VERIFIED("OTP_004"),
+    OTP_ATTEMPTS_EXHAUSTED("OTP_005"),
+    OTP_CHALLENGE_NOT_FOUND("OTP_006"),
 
     EMAIL_TAKEN("USR_004"),
     PASSWORD_WEAK("USR_005"),
@@ -75,6 +77,8 @@ public enum ErrorCode {
             case OTP_EXPIRED -> "OTP has expired";
             case OTP_RATE_LIMIT_EXCEEDED -> "OTP rate limit exceeded";
             case OTP_ALREADY_VERIFIED -> "OTP already verified";
+            case OTP_ATTEMPTS_EXHAUSTED -> "Too many incorrect attempts";
+            case OTP_CHALLENGE_NOT_FOUND -> "Verification code not found or expired";
             case EMAIL_TAKEN -> "Email is already taken";
             case PASSWORD_WEAK -> "Password does not meet requirements";
             case EMAIL_NOT_VERIFIED -> "Email is not verified";

@@ -43,7 +43,10 @@ public class SocialAuthenticator implements Authenticator<SocialAuthRequest, Aut
                 req.provider().name().toLowerCase(Locale.ROOT), subHash);
         User user = existing.map(UserIdentity::getUser).orElseGet(() -> {
             String email = profile.email();
-            var userByEmail = email != null
+            // Only link to an existing local account by email when the provider asserts the email is
+            // verified. Trusting an unverified email would allow account takeover (an attacker could
+            // present an OIDC identity whose email equals the victim's).
+            var userByEmail = (email != null && profile.emailVerified())
                     ? users.findByEmailHash(hashService.hash(email.toLowerCase(Locale.ROOT)))
                     : Optional.<User>empty();
             var u = userByEmail.orElseGet(() -> {
@@ -65,10 +68,13 @@ public class SocialAuthenticator implements Authenticator<SocialAuthRequest, Aut
                         newUser.getOnboardingStatus()));
                 return newUser;
             });
+            String providerType = req.provider().name().toLowerCase(Locale.ROOT);
             identities.save(UserIdentity.builder()
                     .user(u)
-                    .providerType(req.provider().name().toLowerCase(Locale.ROOT))
+                    .providerType(providerType)
                     .identifierHash(subHash)
+                    // Required NOT NULL column — must be populated on insert.
+                    .normalizedIdentifier(providerType + ":" + profile.subject().toLowerCase(Locale.ROOT))
                     .isPrimary(true)
                     .verifiedAt(Instant.now())
                     .build());

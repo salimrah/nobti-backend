@@ -2,6 +2,7 @@ package ma.noba.provider.interfaces.rest.discovery;
 
 import ma.noba.provider.application.dto.NearbyProviderResponse;
 import ma.noba.provider.application.dto.ProviderResponse;
+import ma.noba.provider.application.dto.ProviderServiceResponse;
 import ma.noba.provider.application.service.ProviderApplicationService;
 import ma.noba.provider.application.service.ProviderDiscoveryService;
 import ma.noba.shared.application.dto.PagedResponse;
@@ -43,18 +44,32 @@ public class ProviderDiscoveryController {
         return ResponseEntity.ok(providerService.getProvider(id));
     }
 
+    @Operation(summary = "Get a provider's active services")
+    @GetMapping("/{id}/services")
+    public ResponseEntity<java.util.List<ProviderServiceResponse>> getProviderServices(@PathVariable UUID id) {
+        return ResponseEntity.ok(providerService.getServices(id));
+    }
+
     @Operation(summary = "Get customer's favorite providers")
     @GetMapping("/favorites")
     public ResponseEntity<List<ProviderResponse>> getFavorites(@AuthenticationPrincipal UserPrincipal user) {
         return ResponseEntity.ok(providerService.getCustomerFavorites(user.id()));
     }
 
-    @Operation(summary = "Search providers by category (paginated)")
+    @Operation(summary = "Search providers by free text and/or category (paginated)")
     @GetMapping("/search")
-    public ResponseEntity<PagedResponse<ProviderResponse>> searchByCategory(
-            @RequestParam String category,
+    public ResponseEntity<PagedResponse<ProviderResponse>> search(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String q,
             Pageable pageable) {
-        return ResponseEntity.ok(providerService.searchByCategory(category, pageable));
+        // Free-text search takes precedence; otherwise fall back to category; otherwise all active.
+        if (q != null && !q.isBlank()) {
+            return ResponseEntity.ok(providerService.searchByText(q.trim(), pageable));
+        }
+        if (category != null && !category.isBlank()) {
+            return ResponseEntity.ok(providerService.searchByCategory(category, pageable));
+        }
+        return ResponseEntity.ok(providerService.getAllActive(pageable));
     }
 
     @GetMapping("/nearby")

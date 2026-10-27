@@ -28,7 +28,7 @@ public class PaymentController {
 
     @PostMapping("/checkout")
     public ResponseEntity<CheckoutResponse> createCheckout(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @Valid @RequestBody CreateCheckoutRequest request
     ) {
         CheckoutResponse response = paymentService.createCheckout(userId, request);
@@ -36,14 +36,21 @@ public class PaymentController {
     }
 
     @GetMapping("/transactions/{id}")
-    public ResponseEntity<TransactionResponse> getTransaction(@PathVariable UUID id) {
+    public ResponseEntity<TransactionResponse> getTransaction(
+        @AuthenticationPrincipal(expression = "id") UUID userId,
+        @PathVariable UUID id
+    ) {
         PaymentTransaction tx = paymentService.getTransaction(id);
+        UUID callerProviderId = providerLookupPort.findProviderIdByUserId(userId).orElse(null);
+        if (!tx.getUserId().equals(userId) && !tx.getProviderId().equals(callerProviderId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         return ResponseEntity.ok(toTransactionResponse(tx));
     }
 
     @GetMapping("/transactions")
     public ResponseEntity<Page<TransactionResponse>> getMyTransactions(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size
     ) {
@@ -53,17 +60,21 @@ public class PaymentController {
 
     @GetMapping("/providers/{providerId}/transactions")
     public ResponseEntity<Page<TransactionResponse>> getProviderTransactions(
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @PathVariable UUID providerId,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size
     ) {
+        if (!providerId.equals(providerLookupPort.findProviderIdByUserId(userId).orElse(null))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         Page<PaymentTransaction> transactions = paymentService.getProviderTransactions(providerId, page, size);
         return ResponseEntity.ok(transactions.map(PaymentController::toTransactionResponse));
     }
 
     @PostMapping("/providers/self/payout-settings")
     public ResponseEntity<PayoutSettingsResponse> getOrCreatePayoutSettings(
-        @AuthenticationPrincipal UUID userId
+        @AuthenticationPrincipal(expression = "id") UUID userId
     ) {
         UUID providerId = getProviderIdForUser(userId);
         PayoutSettingsResponse response = paymentService.getOrCreatePayoutSettings(providerId);
@@ -72,7 +83,7 @@ public class PaymentController {
 
     @PostMapping("/providers/self/payout-settings/account")
     public ResponseEntity<Void> updateStripeAccount(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @RequestParam String stripeAccountId
     ) {
         UUID providerId = getProviderIdForUser(userId);
@@ -82,7 +93,7 @@ public class PaymentController {
 
     @GetMapping("/providers/self/payouts")
     public ResponseEntity<Page<PayoutResponse>> getMyPayouts(
-        @AuthenticationPrincipal UUID userId,
+        @AuthenticationPrincipal(expression = "id") UUID userId,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size
     ) {
@@ -100,13 +111,26 @@ public class PaymentController {
     }
 
     @PostMapping("/providers/{providerId}/refund")
-    public ResponseEntity<Void> refund(@PathVariable UUID providerId, @RequestParam UUID transactionId) {
+    public ResponseEntity<Void> refund(
+        @AuthenticationPrincipal(expression = "id") UUID userId,
+        @PathVariable UUID providerId,
+        @RequestParam UUID transactionId
+    ) {
+        // Only the provider that owns the transaction may refund it (previously any authenticated
+        // caller could refund any transaction).
+        if (!providerId.equals(providerLookupPort.findProviderIdByUserId(userId).orElse(null))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        PaymentTransaction tx = paymentService.getTransaction(transactionId);
+        if (!tx.getProviderId().equals(providerId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         paymentService.processRefund(transactionId);
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/providers/self/revenue")
-    public ResponseEntity<RevenueSummaryResponse> getRevenue(@AuthenticationPrincipal UUID userId) {
+    public ResponseEntity<RevenueSummaryResponse> getRevenue(@AuthenticationPrincipal(expression = "id") UUID userId) {
         UUID providerId = getProviderIdForUser(userId);
         return ResponseEntity.ok(revenueService.getRevenueSummary(providerId));
     }

@@ -1,11 +1,10 @@
 package ma.noba.identity.domain.exception;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
+import ma.noba.shared.domain.exception.DomainException;
+import ma.noba.shared.domain.exception.ErrorCode;
 
-@ResponseStatus(HttpStatus.BAD_REQUEST)
-public class InvalidCodeException extends RuntimeException {
+public class InvalidCodeException extends DomainException {
     public InvalidCodeException(String message) {
-        super(message);
+        super(ErrorCode.OTP_INVALID_CODE, message);
     }
 }

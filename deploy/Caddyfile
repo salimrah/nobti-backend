@@ -1,0 +1,32 @@
+# Noba production reverse proxy (Caddy 2).
+# - Automatic HTTPS via Let's Encrypt
+# - WebSocket/SSE passthrough for queue realtime (STOMP over SockJS)
+# - gzip/zstd compression
+{
+	email {$ACME_EMAIL}
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# Long timeouts keep realtime connections alive through idle periods.
+	reverse_proxy noba-backend:8080 {
+		transport http {
+			dial_timeout 10s
+			response_header_timeout 60s
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

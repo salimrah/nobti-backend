@@ -19,4 +19,10 @@ public class ProviderLookupAdapter implements ProviderLookupPort {
         return providerRepository.findByUserId(userId)
             .map(provider -> provider.getId());
     }
+
+    @Override
+    public Optional<String> findProviderName(UUID providerId) {
+        return providerRepository.findById(providerId)
+            .map(provider -> provider.getName());
+    }
 }

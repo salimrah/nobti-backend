@@ -37,12 +37,14 @@ public class PackageApplicationService {
         return toResponse(pkg);
     }
 
+    @Transactional(readOnly = true)
     public List<PackageResponse> getProviderPackages(UUID providerId) {
         return packageRepository.findByProviderId(providerId).stream()
             .map(this::toResponse)
             .toList();
     }
 
+    @Transactional(readOnly = true)
     public List<PackageResponse> getActiveProviderPackages(UUID providerId) {
         return packageRepository.findByProviderIdAndActive(providerId, true).stream()
             .map(this::toResponse)
@@ -50,9 +52,8 @@ public class PackageApplicationService {
     }
 
     @Transactional
-    public PackageResponse updatePackage(UUID packageId, UpdatePackageRequest request) {
-        ServicePackage pkg = packageRepository.findById(packageId)
-            .orElseThrow(() -> new NotFoundException(ErrorCode.NOT_FOUND, "Package not found: " + packageId));
+    public PackageResponse updatePackage(UUID packageId, UUID providerId, UpdatePackageRequest request) {
+        ServicePackage pkg = requireOwnedPackage(packageId, providerId);
         pkg.update(request.getName(), request.getDescription(),
             request.getPrice(), request.getOriginalPrice(),
             request.getValidDays() != null ? request.getValidDays() : 0);
@@ -61,11 +62,19 @@ public class PackageApplicationService {
     }
 
     @Transactional
-    public void deactivatePackage(UUID packageId) {
-        ServicePackage pkg = packageRepository.findById(packageId)
-            .orElseThrow(() -> new NotFoundException(ErrorCode.NOT_FOUND, "Package not found: " + packageId));
+    public void deactivatePackage(UUID packageId, UUID providerId) {
+        ServicePackage pkg = requireOwnedPackage(packageId, providerId);
         pkg.deactivate();
         packageRepository.save(pkg);
+    }
+
+    private ServicePackage requireOwnedPackage(UUID packageId, UUID providerId) {
+        ServicePackage pkg = packageRepository.findById(packageId)
+            .orElseThrow(() -> new NotFoundException(ErrorCode.NOT_FOUND, "Package not found: " + packageId));
+        if (!pkg.getProviderId().equals(providerId)) {
+            throw new org.springframework.security.access.AccessDeniedException("Not the provider of this package");
+        }
+        return pkg;
     }
 
     private PackageResponse toResponse(ServicePackage pkg) {
