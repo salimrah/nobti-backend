@@ -1,7 +1,6 @@
 package ma.noba.provider.application.dto;
 
 import ma.noba.provider.domain.model.ProviderStatus;
-import ma.noba.subscription.domain.model.SubscriptionTier;
 
 import java.util.UUID;
 
@@ -21,7 +20,7 @@ public record ProviderResponse(
         boolean wheelchairAccessible,
         boolean signLanguage,
         boolean sensoryFriendly,
-        SubscriptionTier subscriptionTier,
+        String subscriptionTier,
         double averageRating,
         int ratingCount,
         boolean openNow

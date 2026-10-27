@@ -1,4 +1,4 @@
-package ma.noba.user.infra.adapter;
+package ma.noba.identity.infra.adapter;
 
 import ma.noba.identity.domain.repository.DeviceRepository;
 import ma.noba.shared.domain.port.FcmTokenQueryPort;

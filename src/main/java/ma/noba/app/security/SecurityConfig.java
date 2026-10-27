@@ -1,6 +1,5 @@
-package ma.noba.config;
+package ma.noba.app.security;
 
-import ma.noba.identity.infrastructure.ProblemDetailsAuthEntryPoint;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

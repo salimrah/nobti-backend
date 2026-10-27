@@ -11,16 +11,12 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.library.freeze.FreezingArchRule;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
@@ -110,24 +106,12 @@ class ModuleBoundaryTest {
 
     /**
      * Modules must form a DAG before they can be extracted into build modules or services.
-     * The known cycles are listed in {@code known-module-cycles.txt}; this test fails only when a
-     * NEW cycle appears, so the existing ones can be paid down incrementally.
+     * There are no known cycles: this is a hard gate. Introduce a port or a domain event instead.
      */
     @Test
-    void noNewModuleCycles() throws IOException {
-        Path baseline = Path.of("src/test/resources/architecture/known-module-cycles.txt");
-        Set<String> known = Files.exists(baseline)
-                ? Files.readAllLines(baseline).stream()
-                        .map(String::trim)
-                        .filter(line -> !line.isEmpty() && !line.startsWith("#"))
-                        .collect(Collectors.toSet())
-                : Set.of();
-
-        Set<String> added = new TreeSet<>(currentCyclePairs());
-        added.removeAll(known);
-
-        assertThat(added)
-                .as("New module cycles introduced. Break them with a port or a domain event before adding them to %s", baseline)
+    void modulesAreFreeOfCycles() {
+        assertThat(currentCyclePairs())
+                .as("Module dependency cycles detected. Break them with a consumer-owned port or a domain event.")
                 .isEmpty();
     }
 
@@ -209,6 +193,11 @@ class ModuleBoundaryTest {
                     String targetPackage = target.getPackageName();
                     String targetModule = moduleOf(targetPackage);
                     if (targetModule == null || targetModule.equals(sourceModule)) {
+                        continue;
+                    }
+                    // The composition root wires every module together by design, and the shared
+                    // kernel's vocabulary (UserStatus, Money, ...) is intentionally cross-module.
+                    if ("app".equals(sourceModule) || "shared".equals(targetModule)) {
                         continue;
                     }
                     if (targetPackage.startsWith("ma.noba." + targetModule + ".domain.model")

@@ -1,4 +1,4 @@
-package ma.noba.config;
+package ma.noba.app.security;
 
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jwt.JWTClaimsSet;

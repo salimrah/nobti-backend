@@ -25,10 +25,10 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
     private final ApiRateLimiter rateLimiter;
     private final ObjectMapper objectMapper;
-    private final ma.noba.config.RateLimitProperties rateLimitProperties;
+    private final RateLimitProperties rateLimitProperties;
 
     public RateLimitInterceptor(ApiRateLimiter rateLimiter, ObjectMapper objectMapper,
-                                ma.noba.config.RateLimitProperties rateLimitProperties) {
+                                RateLimitProperties rateLimitProperties) {
         this.rateLimiter = rateLimiter;
         this.objectMapper = objectMapper;
         this.rateLimitProperties = rateLimitProperties;

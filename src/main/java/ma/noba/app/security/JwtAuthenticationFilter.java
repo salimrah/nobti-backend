@@ -1,4 +1,4 @@
-package ma.noba.config;
+package ma.noba.app.security;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

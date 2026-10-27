@@ -1,8 +1,8 @@
-package ma.noba.user.infra;
+package ma.noba.identity.infra;
 
 import ma.noba.shared.domain.model.UserStatus;
 import ma.noba.identity.domain.repository.UserRepository;
-import ma.noba.user.domain.port.UserViewRepository;
+import ma.noba.identity.domain.port.UserProjectionPurgePort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -19,11 +19,11 @@ public class UserPurgeJob {
     static final int PURGE_AFTER_DAYS = 30;
 
     private final UserRepository userRepository;
-    private final UserViewRepository userViewRepository;
+    private final UserProjectionPurgePort projectionPurgePort;
 
-    public UserPurgeJob(UserRepository userRepository, UserViewRepository userViewRepository) {
+    public UserPurgeJob(UserRepository userRepository, UserProjectionPurgePort projectionPurgePort) {
         this.userRepository = userRepository;
-        this.userViewRepository = userViewRepository;
+        this.projectionPurgePort = projectionPurgePort;
     }
 
     @Scheduled(cron = "0 0 5 * * *")
@@ -40,7 +40,7 @@ public class UserPurgeJob {
         log.info("Purging {} users deleted before {}", candidates.size(), cutoff);
         for (var user : candidates) {
             try {
-                userViewRepository.deleteById(user.getId());
+                projectionPurgePort.purge(user.getId());
                 userRepository.delete(user);
                 log.debug("Purged user {}", user.getId());
             } catch (Exception e) {

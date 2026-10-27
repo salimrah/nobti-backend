@@ -1,4 +1,4 @@
-package ma.noba.config;
+package ma.noba.app.security;
 
 import ma.noba.shared.domain.model.ApiKey;
 import ma.noba.shared.domain.port.service.ApiKeyRepository;

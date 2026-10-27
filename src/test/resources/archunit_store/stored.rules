@@ -1,6 +1,6 @@
 #
-#Tue Oct 27 02:46:54 WEST 2026
-classes\ that\ reside\ in\ a\ package\ 'ma.noba..'\ should\ not\ depend\ on\ another\ module's\ domain\ model=c33efe6f-cfa3-49f9-8299-1f18e38ebefd
-no\ classes\ that\ reside\ in\ a\ package\ '..application..'\ should\ depend\ on\ classes\ that\ reside\ in\ any\ package\ ['..infra..',\ '..infrastructure..']=cb3f6def-e0fb-4ec0-9545-522754b85e1c
-no\ classes\ that\ reside\ in\ a\ package\ '..domain..'\ should\ depend\ on\ classes\ that\ reside\ in\ any\ package\ ['..infra..',\ '..infrastructure..',\ '..interfaces..']=231dc3fb-2989-49d4-857d-cabea1e7d474
-no\ classes\ that\ reside\ in\ a\ package\ '..interfaces..'\ should\ depend\ on\ classes\ that\ reside\ in\ any\ package\ ['..infra..',\ '..infrastructure..']=534f3c02-8341-40cb-8dc9-723a482ad144
+#Tue Oct 27 03:08:57 WEST 2026
+classes\ that\ reside\ in\ a\ package\ 'ma.noba..'\ should\ not\ depend\ on\ another\ module's\ domain\ model=98102f88-46c0-4d63-86de-6ffc12190c47
+no\ classes\ that\ reside\ in\ a\ package\ '..application..'\ should\ depend\ on\ classes\ that\ reside\ in\ any\ package\ ['..infra..',\ '..infrastructure..']=ff9d6256-66dc-42f3-a1f4-6491671ab634
+no\ classes\ that\ reside\ in\ a\ package\ '..domain..'\ should\ depend\ on\ classes\ that\ reside\ in\ any\ package\ ['..infra..',\ '..infrastructure..',\ '..interfaces..']=e364b0e1-251a-4a7d-9163-f37eff00e912
+no\ classes\ that\ reside\ in\ a\ package\ '..interfaces..'\ should\ depend\ on\ classes\ that\ reside\ in\ any\ package\ ['..infra..',\ '..infrastructure..']=7aec6c20-ee8c-486f-96fb-862a6d599cf4

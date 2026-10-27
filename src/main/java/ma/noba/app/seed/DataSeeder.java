@@ -1,4 +1,4 @@
-package ma.noba.config;
+package ma.noba.app.seed;
 
 import ma.noba.provider.domain.model.ServiceCategory;
 import ma.noba.provider.domain.port.service.ServiceCategoryRepository;

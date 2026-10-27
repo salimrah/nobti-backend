@@ -1,6 +1,5 @@
-package ma.noba.config;
+package ma.noba.shared.infra.ratelimit;
 
-import ma.noba.shared.infra.ratelimit.RateLimitConfig;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

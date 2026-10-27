@@ -1,4 +1,4 @@
-package ma.noba.queue.infra.listener;
+package ma.noba.app.listeners;
 
 import ma.noba.provider.domain.model.ProviderService;
 import ma.noba.provider.domain.port.service.ProviderRepository;

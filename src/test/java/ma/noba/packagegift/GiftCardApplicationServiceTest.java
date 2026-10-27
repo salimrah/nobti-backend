@@ -3,9 +3,8 @@ package ma.noba.packagegift;
 import ma.noba.packagegift.application.dto.PurchaseGiftCardRequest;
 import ma.noba.packagegift.application.service.GiftCardApplicationService;
 import ma.noba.packagegift.domain.model.GiftCard;
+import ma.noba.packagegift.domain.port.GiftCardPaymentPort;
 import ma.noba.packagegift.domain.port.GiftCardRepository;
-import ma.noba.payment.domain.model.PaymentTransaction;
-import ma.noba.payment.domain.port.PaymentTransactionRepository;
 import ma.noba.shared.domain.exception.ValidationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,7 +30,7 @@ import static org.mockito.Mockito.when;
 class GiftCardApplicationServiceTest {
 
     @Mock GiftCardRepository giftCardRepository;
-    @Mock PaymentTransactionRepository paymentTransactionRepository;
+    @Mock GiftCardPaymentPort paymentPort;
 
     private GiftCardApplicationService service;
 
@@ -41,15 +40,12 @@ class GiftCardApplicationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new GiftCardApplicationService(giftCardRepository, paymentTransactionRepository);
+        service = new GiftCardApplicationService(giftCardRepository, paymentPort);
     }
 
-    private PaymentTransaction transaction(UUID owner, BigDecimal amount, boolean succeeded) {
-        PaymentTransaction tx = new PaymentTransaction(owner, providerId, null, "USD", amount);
-        if (succeeded) {
-            tx.markSucceeded("pi_1", "ch_1", new BigDecimal("0.00"));
-        }
-        return tx;
+    private GiftCardPaymentPort.VerifiedPayment payment(
+            UUID txId, UUID owner, UUID provider, BigDecimal amount, boolean succeeded) {
+        return new GiftCardPaymentPort.VerifiedPayment(txId, owner, provider, amount, succeeded);
     }
 
     private PurchaseGiftCardRequest request(BigDecimal amount, UUID txId) {
@@ -66,8 +62,8 @@ class GiftCardApplicationServiceTest {
     @DisplayName("A gift card cannot be issued without a SUCCEEDED payment")
     void purchaseWithoutSuccessfulPaymentIsRejected() {
         UUID txId = UUID.randomUUID();
-        when(paymentTransactionRepository.findById(txId))
-                .thenReturn(Optional.of(transaction(buyerId, new BigDecimal("100.00"), false)));
+        when(paymentPort.findVerifiedPayment(txId))
+                .thenReturn(Optional.of(payment(txId, buyerId, providerId, new BigDecimal("100.00"), false)));
 
         assertThatThrownBy(() -> service.purchaseGiftCard(buyerId, request(new BigDecimal("100.00"), txId)))
                 .isInstanceOf(ValidationException.class);
@@ -79,8 +75,8 @@ class GiftCardApplicationServiceTest {
     @DisplayName("A payment belonging to another user cannot fund a gift card")
     void purchaseWithForeignPaymentIsDenied() {
         UUID txId = UUID.randomUUID();
-        when(paymentTransactionRepository.findById(txId))
-                .thenReturn(Optional.of(transaction(otherUserId, new BigDecimal("100.00"), true)));
+        when(paymentPort.findVerifiedPayment(txId))
+                .thenReturn(Optional.of(payment(txId, otherUserId, providerId, new BigDecimal("100.00"), true)));
 
         assertThatThrownBy(() -> service.purchaseGiftCard(buyerId, request(new BigDecimal("100.00"), txId)))
                 .isInstanceOf(AccessDeniedException.class);
@@ -92,9 +88,8 @@ class GiftCardApplicationServiceTest {
     @DisplayName("A payment for a different provider cannot fund the gift card")
     void purchaseWithProviderMismatchIsRejected() {
         UUID txId = UUID.randomUUID();
-        PaymentTransaction tx = new PaymentTransaction(buyerId, UUID.randomUUID(), null, "USD", new BigDecimal("100.00"));
-        tx.markSucceeded("pi_1", "ch_1", new BigDecimal("0.00"));
-        when(paymentTransactionRepository.findById(txId)).thenReturn(Optional.of(tx));
+        when(paymentPort.findVerifiedPayment(txId))
+                .thenReturn(Optional.of(payment(txId, buyerId, UUID.randomUUID(), new BigDecimal("100.00"), true)));
 
         assertThatThrownBy(() -> service.purchaseGiftCard(buyerId, request(new BigDecimal("100.00"), txId)))
                 .isInstanceOf(ValidationException.class);
@@ -106,8 +101,8 @@ class GiftCardApplicationServiceTest {
     @DisplayName("The gift card amount must match the amount actually paid")
     void purchaseWithAmountMismatchIsRejected() {
         UUID txId = UUID.randomUUID();
-        when(paymentTransactionRepository.findById(txId))
-                .thenReturn(Optional.of(transaction(buyerId, new BigDecimal("1.00"), true)));
+        when(paymentPort.findVerifiedPayment(txId))
+                .thenReturn(Optional.of(payment(txId, buyerId, providerId, new BigDecimal("1.00"), true)));
 
         assertThatThrownBy(() -> service.purchaseGiftCard(buyerId, request(new BigDecimal("10000.00"), txId)))
                 .isInstanceOf(ValidationException.class);
@@ -119,9 +114,9 @@ class GiftCardApplicationServiceTest {
     @DisplayName("A single payment cannot be reused to mint multiple gift cards")
     void purchaseWithReusedPaymentIsRejected() {
         UUID txId = UUID.randomUUID();
-        when(paymentTransactionRepository.findById(txId))
-                .thenReturn(Optional.of(transaction(buyerId, new BigDecimal("100.00"), true)));
-        when(giftCardRepository.existsByPaymentTransactionId(any())).thenReturn(true);
+        when(paymentPort.findVerifiedPayment(txId))
+                .thenReturn(Optional.of(payment(txId, buyerId, providerId, new BigDecimal("100.00"), true)));
+        when(giftCardRepository.existsByPaymentTransactionId(txId)).thenReturn(true);
 
         assertThatThrownBy(() -> service.purchaseGiftCard(buyerId, request(new BigDecimal("100.00"), txId)))
                 .isInstanceOf(ValidationException.class);
@@ -133,8 +128,8 @@ class GiftCardApplicationServiceTest {
     @DisplayName("A matching SUCCEEDED payment issues a linked gift card")
     void purchaseWithSucceededPaymentIssuesCard() {
         UUID txId = UUID.randomUUID();
-        when(paymentTransactionRepository.findById(txId))
-                .thenReturn(Optional.of(transaction(buyerId, new BigDecimal("100.00"), true)));
+        when(paymentPort.findVerifiedPayment(txId))
+                .thenReturn(Optional.of(payment(txId, buyerId, providerId, new BigDecimal("100.00"), true)));
         lenient().when(giftCardRepository.existsByPaymentTransactionId(any())).thenReturn(false);
         when(giftCardRepository.save(any())).thenAnswer(invocation -> {
             GiftCard saved = invocation.getArgument(0);

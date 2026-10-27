@@ -26,9 +26,7 @@ import ma.noba.shared.domain.event.EventBus;
 import ma.noba.shared.domain.exception.NotFoundException;
 import ma.noba.shared.domain.exception.BusinessException;
 import ma.noba.shared.domain.exception.ErrorCode;
-import ma.noba.subscription.domain.model.SubscriptionTier;
-import ma.noba.subscription.domain.port.ProviderSubscriptionRepository;
-import ma.noba.subscription.domain.model.ProviderSubscription;
+import ma.noba.provider.domain.port.ProviderSubscriptionPort;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -51,7 +49,7 @@ public class ProviderApplicationService {
     private final ProviderFavoriteRepository favoriteRepository;
     private final ServiceCategoryRepository serviceCategoryRepository;
     private final ProviderProvisioningPort provisioningPort;
-    private final ProviderSubscriptionRepository subscriptionRepository;
+    private final ProviderSubscriptionPort subscriptionPort;
     private final BusinessHoursRepository businessHoursRepository;
     private final EventBus eventBus;
 
@@ -61,7 +59,7 @@ public class ProviderApplicationService {
             ProviderFavoriteRepository favoriteRepository,
             ServiceCategoryRepository serviceCategoryRepository,
             ProviderProvisioningPort provisioningPort,
-            ProviderSubscriptionRepository subscriptionRepository,
+            ProviderSubscriptionPort subscriptionPort,
             BusinessHoursRepository businessHoursRepository,
             EventBus eventBus) {
         this.providerRepository = providerRepository;
@@ -69,7 +67,7 @@ public class ProviderApplicationService {
         this.favoriteRepository = favoriteRepository;
         this.serviceCategoryRepository = serviceCategoryRepository;
         this.provisioningPort = provisioningPort;
-        this.subscriptionRepository = subscriptionRepository;
+        this.subscriptionPort = subscriptionPort;
         this.businessHoursRepository = businessHoursRepository;
         this.eventBus = eventBus;
     }
@@ -87,7 +85,7 @@ public class ProviderApplicationService {
             provider.setLocation(request.latitude(), request.longitude());
         }
         Provider saved = providerRepository.save(provider);
-        subscriptionRepository.save(new ProviderSubscription(saved.getId(), SubscriptionTier.FREE));
+        subscriptionPort.createFree(saved.getId());
         provisioningPort.onProviderCreated(saved.getUserId(), request.firstName(), request.lastName());
         eventBus.publish(new ProviderCreatedEvent(saved.getId(), saved.getUserId()));
         log.info("Provider created: {} for user: {}", saved.getId(), userId);
@@ -154,9 +152,7 @@ public class ProviderApplicationService {
                     return new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "No provider profile found");
                 });
 
-        ProviderSubscription subscription = subscriptionRepository.findByProviderId(provider.getId())
-                .orElse(null);
-        int maxServices = subscription != null ? subscription.getMaxServices() : 1;
+        int maxServices = subscriptionPort.maxServices(provider.getId());
         int currentServices = provider.getActiveServices().size();
         if (currentServices >= maxServices) {
             throw new BusinessException(ErrorCode.TIER_LIMIT_EXCEEDED,
@@ -399,9 +395,7 @@ public class ProviderApplicationService {
     }
 
     private ProviderResponse toResponse(Provider provider, Map<UUID, Double> avgRatings, Map<UUID, Integer> ratingCounts) {
-        SubscriptionTier tier = subscriptionRepository.findByProviderId(provider.getId())
-                .map(ProviderSubscription::getTier)
-                .orElse(SubscriptionTier.FREE);
+        String tier = subscriptionPort.tier(provider.getId());
         return new ProviderResponse(
                 provider.getId(),
                 provider.getUserId(),

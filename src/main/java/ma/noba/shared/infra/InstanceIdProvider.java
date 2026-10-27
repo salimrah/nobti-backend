@@ -1,4 +1,4 @@
-package ma.noba.config;
+package ma.noba.shared.infra;
 
 import org.springframework.stereotype.Component;
 
