@@ -8,6 +8,7 @@ import ma.noba.shared.domain.port.AdminUserPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -47,6 +48,11 @@ public class AdminService {
     @Transactional
     public void activateUser(UUID userId) {
         adminIdentityPort.activateUser(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminProviderPort.PendingProvider> pendingProviders() {
+        return adminProviderPort.pendingProviders();
     }
 
     @Transactional
