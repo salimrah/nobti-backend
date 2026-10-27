@@ -1,5 +1,7 @@
 package ma.noba.identity.infrastructure.crypto;
 
+import ma.noba.shared.domain.crypto.AesGcmCrypto;
+
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;

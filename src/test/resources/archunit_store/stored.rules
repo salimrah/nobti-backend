@@ -1,6 +1,0 @@
-#
-#Tue Oct 27 03:08:57 WEST 2026
-classes\ that\ reside\ in\ a\ package\ 'ma.noba..'\ should\ not\ depend\ on\ another\ module's\ domain\ model=98102f88-46c0-4d63-86de-6ffc12190c47
-no\ classes\ that\ reside\ in\ a\ package\ '..application..'\ should\ depend\ on\ classes\ that\ reside\ in\ any\ package\ ['..infra..',\ '..infrastructure..']=ff9d6256-66dc-42f3-a1f4-6491671ab634
-no\ classes\ that\ reside\ in\ a\ package\ '..domain..'\ should\ depend\ on\ classes\ that\ reside\ in\ any\ package\ ['..infra..',\ '..infrastructure..',\ '..interfaces..']=e364b0e1-251a-4a7d-9163-f37eff00e912
-no\ classes\ that\ reside\ in\ a\ package\ '..interfaces..'\ should\ depend\ on\ classes\ that\ reside\ in\ any\ package\ ['..infra..',\ '..infrastructure..']=7aec6c20-ee8c-486f-96fb-862a6d599cf4

@@ -8,7 +8,6 @@ import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
-import com.tngtech.archunit.library.freeze.FreezingArchRule;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;
@@ -161,22 +160,22 @@ class ModuleBoundaryTest {
 
     @Test
     void domainDoesNotDependOnAdapters() {
-        FreezingArchRule.freeze(DOMAIN_DOES_NOT_DEPEND_ON_ADAPTERS).check(CLASSES);
+        DOMAIN_DOES_NOT_DEPEND_ON_ADAPTERS.check(CLASSES);
     }
 
     @Test
     void applicationDoesNotDependOnInfra() {
-        FreezingArchRule.freeze(APPLICATION_DOES_NOT_DEPEND_ON_INFRA).check(CLASSES);
+        APPLICATION_DOES_NOT_DEPEND_ON_INFRA.check(CLASSES);
     }
 
     @Test
     void interfacesDoNotDependOnInfra() {
-        FreezingArchRule.freeze(INTERFACES_DO_NOT_DEPEND_ON_INFRA).check(CLASSES);
+        INTERFACES_DO_NOT_DEPEND_ON_INFRA.check(CLASSES);
     }
 
     @Test
     void modulesDoNotSharePersistenceEntities() {
-        FreezingArchRule.freeze(MODULES_DO_NOT_SHARE_PERSISTENCE_ENTITIES).check(CLASSES);
+        MODULES_DO_NOT_SHARE_PERSISTENCE_ENTITIES.check(CLASSES);
     }
 
     private static ArchCondition<JavaClass> notDependOnOtherModulesEntities() {

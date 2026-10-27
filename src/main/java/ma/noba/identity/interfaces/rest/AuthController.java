@@ -6,10 +6,8 @@ import ma.noba.identity.application.*;
 import ma.noba.identity.domain.exception.TooManyRequestsException;
 import ma.noba.identity.application.AuthToken;
 import ma.noba.identity.domain.service.*;
-import ma.noba.identity.infrastructure.JwtLogoutHandler;
 import ma.noba.identity.domain.model.AuthMethod;
 import ma.noba.identity.domain.model.SocialProvider;
-import ma.noba.identity.infrastructure.TokenService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -30,11 +28,10 @@ public class AuthController {
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
     private final OtpService otpService;
     private final AuthenticationService authService;
-    private final TokenService tokenService;
+    private final TokenPort tokenService;
     private final SignupService signupService;
     private final PasswordResetService passwordResetService;
     private final AccountLinkingService accountLinkingService;
-    private final JwtLogoutHandler jwtLogoutHandler;
     private final RateLimiterService rateLimiter;
 
     private static final Pattern UUID_PATTERN = Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", Pattern.CASE_INSENSITIVE);
@@ -170,7 +167,7 @@ public class AuthController {
 
     // Item 6: List active sessions
     @GetMapping("/sessions")
-    public ResponseEntity<List<TokenService.ActiveSession>> listSessions(
+    public ResponseEntity<List<ma.noba.identity.application.dto.ActiveSessionView>> listSessions(
             @AuthenticationPrincipal org.springframework.security.core.Authentication auth) {
         UUID userId = extractUserId(auth);
         return ResponseEntity.ok(tokenService.getActiveSessions(userId));

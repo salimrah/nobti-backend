@@ -8,6 +8,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.JWSHeader;
 import lombok.Getter;
+import ma.noba.identity.domain.port.JwksPort;
 import ma.noba.identity.infrastructure.config.JwtTokenProperties;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -30,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 @Component
-public class JwtKeyManager {
+public class JwtKeyManager implements JwksPort {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(JwtKeyManager.class);
 
@@ -245,5 +246,10 @@ public class JwtKeyManager {
 
     public JWKSet publicJwkSet() {
         return new JWKSet((JWK) keys.values().stream().map(RSAKey::toPublicJWK).toList());
+    }
+
+    @Override
+    public java.util.Map<String, Object> publicJwks() {
+        return publicJwkSet().toJSONObject();
     }
 }

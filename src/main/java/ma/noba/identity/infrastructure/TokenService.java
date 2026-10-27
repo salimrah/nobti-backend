@@ -6,6 +6,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import lombok.RequiredArgsConstructor;
 import ma.noba.identity.application.AuthToken;
+import ma.noba.identity.application.dto.ActiveSessionView;
 import ma.noba.identity.domain.model.RefreshToken;
 import ma.noba.identity.domain.model.User;
 import ma.noba.shared.domain.model.OnboardingStatus;
@@ -109,17 +110,15 @@ public class TokenService implements TokenPort {
     }
 
     @Transactional(readOnly = true)
-    public List<ActiveSession> getActiveSessions(UUID userId) {
+    public List<ActiveSessionView> getActiveSessions(UUID userId) {
         return refreshRepo.findByUserIdAndRevokedAtIsNull(userId).stream()
-                .map(rt -> new ActiveSession(
+                .map(rt -> new ActiveSessionView(
                         rt.getId(),
                         rt.getCreatedAt(),
                         rt.getExpiresAt(),
                         rt.getLastUsedAt()))
                 .toList();
     }
-
-    public record ActiveSession(UUID id, Instant createdAt, Instant expiresAt, Instant lastUsedAt) {}
 
     private String signAccessToken(User user) {
         try {

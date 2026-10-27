@@ -1,3 +1,0 @@
-Field <ma.noba.identity.domain.model.User.email> has annotation member of type <ma.noba.identity.infrastructure.crypto.AesGcmStringAttributeConverter> in (User.java:0)
-Field <ma.noba.identity.domain.model.User.phone> has annotation member of type <ma.noba.identity.infrastructure.crypto.AesGcmStringAttributeConverter> in (User.java:0)
-Field <ma.noba.identity.domain.model.UserIdentity.identifierEncrypted> has annotation member of type <ma.noba.identity.infrastructure.crypto.AesGcmStringAttributeConverter> in (UserIdentity.java:0)

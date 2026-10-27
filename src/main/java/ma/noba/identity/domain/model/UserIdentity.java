@@ -29,7 +29,7 @@ public class UserIdentity {
     private String providerType;
     private String identifierHash;
 
-    @Convert(converter = ma.noba.identity.infrastructure.crypto.AesGcmStringAttributeConverter.class)
+    @Convert(converter = ma.noba.shared.domain.crypto.AesGcmStringAttributeConverter.class)
     private String identifierEncrypted;
 
     @Column(nullable = false)

@@ -2,7 +2,7 @@ package ma.noba.identity.domain.model;
 
 import jakarta.persistence.*;
 import lombok.*;
-import ma.noba.identity.infrastructure.crypto.AesGcmStringAttributeConverter;
+import ma.noba.shared.domain.crypto.AesGcmStringAttributeConverter;
 import ma.noba.shared.domain.model.OnboardingStatus;
 import ma.noba.shared.domain.model.UserStatus;
 

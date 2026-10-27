@@ -1,4 +1,4 @@
-package ma.noba.identity.infrastructure.crypto;
+package ma.noba.shared.domain.crypto;
 
 
 import jakarta.persistence.AttributeConverter;
