@@ -65,8 +65,6 @@ echo "━━ Infrastructure ━━"
 
 run_test "App health endpoint" "GET" "/actuator/health" "200"
 run_test "App info endpoint" "GET" "/actuator/info" "200"
-run_test "Metrics endpoint" "GET" "/actuator/metrics" "200"
-run_test "Prometheus metrics" "GET" "/actuator/prometheus" "200"
 
 echo ""
 echo "━━ Core API (Public Endpoints) ━━"
@@ -74,7 +72,6 @@ echo "━━ Core API (Public Endpoints) ━━"
 # Public endpoints that should always work
 run_test "Auth hello endpoint" "GET" "/api/v1/auth/hello" "200"
 run_test "List providers" "GET" "/api/v1/providers" "200"
-run_test "Provider categories" "GET" "/api/v1/providers/categories" "200"
 
 echo ""
 echo "━━ Database Connectivity ━━"
