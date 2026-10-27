@@ -19,7 +19,9 @@ public class FirebaseHealthIndicator implements HealthIndicator {
                     .withDetail("messaging", "available")
                     .build();
         } catch (IllegalStateException e) {
-            return Health.down()
+            // Push is optional for serving traffic: report UNKNOWN so the aggregate health stays UP
+            // (and a missing/misconfigured Firebase does not take the service out of rotation).
+            return Health.unknown()
                     .withDetail("firebase", "not initialized")
                     .withDetail("error", e.getMessage())
                     .withDetail("hint", "Add serviceAccountKey.json to src/main/resources")

@@ -12,7 +12,10 @@ data:
   RABBITMQ_PORT: "5672"
   APP_BASE_URL: "https://api.noba.ma"
   JWT_ISSUER: "https://api.noba.ma"
-  EVENT_BUS_RABBITMQ_ENABLED: "true"
+  MANAGEMENT_SERVER_PORT: "8081"
+  # RabbitMQ is not deployed by these manifests; the outbox/event bus stay off.
+  EVENT_BUS_RABBITMQ_ENABLED: "false"
   QUARTZ_JOB_STORE_TYPE: "jdbc"
+  SHEDLOCK_ENABLED: "true"
   TRACING_ENABLED: "false"
   SENTRY_ENVIRONMENT: "production"

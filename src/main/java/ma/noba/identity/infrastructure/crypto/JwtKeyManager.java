@@ -12,10 +12,17 @@ import ma.noba.identity.infrastructure.config.JwtTokenProperties;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
@@ -30,6 +37,8 @@ public class JwtKeyManager {
     private final Map<String, RSAKey> keys = new ConcurrentHashMap<>();
     private final java.util.Deque<String> keyOrder = new java.util.concurrent.ConcurrentLinkedDeque<>();
     private final java.nio.file.Path keyStore;
+    /** True when keys come from configuration: no rotation, no disk persistence. */
+    private final boolean staticKey;
 
     /** How many signing keys are kept valid at once (current + previous, to survive rotation). */
     private static final int RETAINED_KEYS = 2;
@@ -42,10 +51,60 @@ public class JwtKeyManager {
         this.keyStore = (configured != null && !configured.isBlank())
                 ? java.nio.file.Path.of(configured)
                 : null;
+
+        // Preferred in production: a fixed key supplied via env/secret. Works across replicas and
+        // survives restarts/redeploys without shared storage.
+        if (props.jwt != null && hasText(props.jwt.rsaPrivateKey) && hasText(props.jwt.rsaPublicKey)) {
+            this.staticKey = true;
+            installConfiguredKey(props.jwt.rsaPrivateKey, props.jwt.rsaPublicKey);
+            return;
+        }
+        this.staticKey = false;
+
         // Reuse persisted keys so a restart does not invalidate every issued token.
         if (keyStore == null || !loadPersistedKeys()) {
             rotate();
         }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private void installConfiguredKey(String privateKeyRaw, String publicKeyRaw) {
+        try {
+            KeyFactory factory = KeyFactory.getInstance("RSA");
+            PrivateKey privateKey = factory.generatePrivate(
+                    new PKCS8EncodedKeySpec(decodeKeyMaterial(privateKeyRaw)));
+            PublicKey publicKey = factory.generatePublic(
+                    new X509EncodedKeySpec(decodeKeyMaterial(publicKeyRaw)));
+
+            String kid = stableKeyId(publicKey);
+            RSAKey jwk = new RSAKey.Builder((RSAPublicKey) publicKey)
+                    .privateKey((RSAPrivateKey) privateKey)
+                    .keyID(kid)
+                    .build();
+            keys.put(kid, jwk);
+            keyOrder.addLast(kid);
+            currentKid = kid;
+            log.info("Using configured JWT signing key (kid={})", kid);
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Invalid security.jwt.rsa-private-key / rsa-public-key (expected PKCS#8 / X.509, PEM or base64)", e);
+        }
+    }
+
+    private static byte[] decodeKeyMaterial(String raw) {
+        String normalized = raw
+                .replace("\\n", "\n")
+                .replaceAll("-----[A-Z ]+-----", "")
+                .replaceAll("\\s", "");
+        return Base64.getDecoder().decode(normalized);
+    }
+
+    private static String stableKeyId(PublicKey publicKey) throws Exception {
+        byte[] digest = MessageDigest.getInstance("SHA-256").digest(publicKey.getEncoded());
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(digest).substring(0, 16);
     }
 
     private java.nio.file.Path currentKidFile() {
@@ -120,6 +179,10 @@ public class JwtKeyManager {
                initialDelayString = "${security.jwt.key-rotation-hours:24}",
                timeUnit = TimeUnit.HOURS)
     public void rotate() {
+        if (staticKey) {
+            log.debug("JWT rotation skipped: signing key is provided by configuration");
+            return;
+        }
         try {
             KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
             gen.initialize(2048);

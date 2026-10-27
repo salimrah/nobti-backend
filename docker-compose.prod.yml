@@ -16,18 +16,24 @@ services:
     container_name: noba-backend
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-8080}:8080"
+      # Bound to loopback: only the reverse proxy (Caddy) is exposed publicly.
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noba
       SPRING_DATASOURCE_USERNAME: ${DB_USER:?DB_USER must be set}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
-      SPRING_DATA_REDIS_URL: redis://redis:6379
+      SPRING_DATA_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379
       SECURITY_PII_SECRET_B64: ${SECURITY_PII_SECRET_B64}
       JWT_ISSUER: ${JWT_ISSUER}
       JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-3600}
       JWT_REFRESH_TOKEN_TTL: ${JWT_REFRESH_TOKEN_TTL:-7}
       JWT_KEY_ROTATION_HOURS: ${JWT_KEY_ROTATION_HOURS:-24}
+      # Preferred: fixed keys (same across replicas/restarts). Falls back to the mounted key store.
+      JWT_RSA_PRIVATE_KEY: ${JWT_RSA_PRIVATE_KEY:-}
+      JWT_RSA_PUBLIC_KEY: ${JWT_RSA_PUBLIC_KEY:-}
+      JWT_KEY_STORE_PATH: ${JWT_KEY_STORE_PATH:-/var/lib/noba/jwt-keys.json}
+      SHEDLOCK_ENABLED: ${SHEDLOCK_ENABLED:-true}
       HIKARI_MAX_POOL_SIZE: "20"
       HIKARI_MIN_IDLE: "5"
       # External services (set in .env or leave empty to disable)
@@ -54,6 +60,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    volumes:
+      # Fallback signing-key store when JWT_RSA_* is not provided.
+      - jwtdata:/var/lib/noba
     networks:
       - noba-network
     healthcheck:
@@ -73,8 +82,9 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "${DB_PORT:-5432}:5432"
+    # Not published: database is reachable only on the compose network.
+    expose:
+      - "5432"
     networks:
       - noba-network
     healthcheck:
@@ -87,10 +97,34 @@ services:
     image: redis:7-alpine
     container_name: noba-redis
     restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}", "--appendonly", "yes"]
     volumes:
       - redisdata:/data
+    expose:
+      - "6379"
+    networks:
+      - noba-network
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Reverse proxy + automatic TLS (Let's Encrypt).
+  # Requires API_DOMAIN (A record → this host) and ACME_EMAIL.
+  # ─────────────────────────────────────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: noba-caddy
+    restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:-api.noba.ma}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@noba.ma}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - noba-backend
     networks:
       - noba-network
 
@@ -124,6 +158,12 @@ volumes:
   pgdata:
     driver: local
   redisdata:
+    driver: local
+  jwtdata:
+    driver: local
+  caddydata:
+    driver: local
+  caddyconfig:
     driver: local
 
 networks:

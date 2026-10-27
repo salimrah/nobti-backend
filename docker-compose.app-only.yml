@@ -28,6 +28,11 @@ services:
       JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-3600}
       JWT_REFRESH_TOKEN_TTL: ${JWT_REFRESH_TOKEN_TTL:-7}
       JWT_KEY_ROTATION_HOURS: ${JWT_KEY_ROTATION_HOURS:-24}
+      # Preferred: fixed keys (same across replicas/restarts). Falls back to the mounted key store.
+      JWT_RSA_PRIVATE_KEY: ${JWT_RSA_PRIVATE_KEY:-}
+      JWT_RSA_PUBLIC_KEY: ${JWT_RSA_PUBLIC_KEY:-}
+      JWT_KEY_STORE_PATH: ${JWT_KEY_STORE_PATH:-/var/lib/noba/jwt-keys.json}
+      SHEDLOCK_ENABLED: ${SHEDLOCK_ENABLED:-true}
       HIKARI_MAX_POOL_SIZE: "20"
       HIKARI_MIN_IDLE: "5"
       # External services (set in .env or leave empty to disable)
@@ -49,9 +54,15 @@ services:
       RABBITMQ_HOST: ${RABBITMQ_HOST:-}
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-}
+    volumes:
+      - jwtdata:/var/lib/noba
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
+
+volumes:
+  jwtdata:
+    driver: local

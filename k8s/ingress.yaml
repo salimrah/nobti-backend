@@ -26,10 +26,3 @@ spec:
                 name: noba-backend
                 port:
                   number: 8080
-          - path: /actuator
-            pathType: Prefix
-            backend:
-              service:
-                name: noba-backend
-                port:
-                  number: 8081

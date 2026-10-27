@@ -87,6 +87,18 @@
             <artifactId>spring-boot-starter-quartz</artifactId>
         </dependency>
 
+        <!-- ShedLock: ensures @Scheduled jobs run on only one instance when scaled horizontally -->
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+            <version>6.6.0</version>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-jdbc-template</artifactId>
+            <version>6.6.0</version>
+        </dependency>
+
         <!-- Firebase -->
         <dependency>
             <groupId>com.google.firebase</groupId>

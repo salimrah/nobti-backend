@@ -4,6 +4,7 @@ import ma.noba.shared.domain.webhook.WebhookDeliveryLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.*;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,7 @@ public class WebhookRetryJob {
     }
 
     @Scheduled(fixedRate = 60_000)
+    @SchedulerLock(name = "webhook-retry", lockAtMostFor = "2m", lockAtLeastFor = "10s")
     @Transactional
     public void retryFailedDeliveries() {
         List<WebhookDeliveryLog> failed = deliveryLogRepository
