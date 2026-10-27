@@ -1,4 +1,4 @@
-package ma.noba.shared.infra.event;
+package ma.noba.app.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,6 +15,7 @@ import ma.noba.queue.domain.event.ClientJoinedQueueEvent;
 import ma.noba.queue.domain.event.ClientLeftQueueEvent;
 import ma.noba.queue.domain.event.ClientServiceCompletedEvent;
 import ma.noba.queue.domain.event.ClientTurnStartedEvent;
+import ma.noba.shared.infra.event.EventIdempotencyStore;
 import ma.noba.shared.domain.event.AccountDeletionRequested;
 import ma.noba.shared.domain.event.DomainEvent;
 import ma.noba.shared.domain.event.UserOnboardingCompletedEvent;

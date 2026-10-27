@@ -1,4 +1,4 @@
-package ma.noba.shared.infra.event;
+package ma.noba.app.events;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ma.noba.identity.domain.event.OtpFailedEvent;
@@ -24,12 +24,12 @@ import ma.noba.shared.domain.model.OutboxEvent;
 import java.util.Map;
 import java.util.function.Function;
 
-class EventDeserializer {
+public class EventDeserializer {
 
     private final ObjectMapper objectMapper;
     private final Map<String, Function<String, DomainEvent>> deserializers;
 
-    EventDeserializer() {
+    public EventDeserializer() {
         this.objectMapper = new ObjectMapper();
         this.deserializers = Map.ofEntries(
                 Map.entry("user.signed_up", json -> deserialize(json, UserSignedUpEvent.class)),
@@ -52,7 +52,7 @@ class EventDeserializer {
         );
     }
 
-    DomainEvent deserialize(OutboxEvent outboxEvent) {
+    public DomainEvent deserialize(OutboxEvent outboxEvent) {
         Function<String, DomainEvent> deserializer = deserializers.get(outboxEvent.getEventType());
         if (deserializer == null) {
             throw new IllegalArgumentException("Unknown event type: " + outboxEvent.getEventType());

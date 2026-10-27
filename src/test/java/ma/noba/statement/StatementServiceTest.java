@@ -1,7 +1,7 @@
 package ma.noba.statement;
 
 import ma.noba.loyalty.domain.model.LoyaltyPointsTransaction;
-import ma.noba.loyalty.infra.JpaLoyaltyPointsTransactionRepository;
+import ma.noba.loyalty.domain.port.LoyaltyPointsTransactionRepository;
 import ma.noba.packagegift.domain.model.GiftCard;
 import ma.noba.packagegift.domain.port.GiftCardRepository;
 import ma.noba.payment.domain.model.PaymentTransaction;
@@ -28,7 +28,7 @@ class StatementServiceTest {
 
     @Mock PaymentTransactionRepository paymentRepository;
     @Mock GiftCardRepository giftCardRepository;
-    @Mock JpaLoyaltyPointsTransactionRepository loyaltyTxnRepository;
+    @Mock LoyaltyPointsTransactionRepository loyaltyTxnRepository;
     @Mock ReferralRepository referralRepository;
 
     private StatementService service;

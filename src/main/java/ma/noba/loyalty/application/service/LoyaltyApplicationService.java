@@ -9,7 +9,7 @@ import ma.noba.loyalty.domain.model.LoyaltyReward;
 import ma.noba.loyalty.domain.port.LoyaltyPointsRepository;
 import ma.noba.loyalty.domain.port.LoyaltyRedemptionRepository;
 import ma.noba.loyalty.domain.port.LoyaltyRewardRepository;
-import ma.noba.loyalty.infra.JpaLoyaltyPointsTransactionRepository;
+import ma.noba.loyalty.domain.port.LoyaltyPointsTransactionRepository;
 import ma.noba.payment.domain.port.ProviderLookupPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +22,7 @@ import java.util.UUID;
 public class LoyaltyApplicationService {
 
     private final LoyaltyPointsRepository pointsRepository;
-    private final JpaLoyaltyPointsTransactionRepository txnRepository;
+    private final LoyaltyPointsTransactionRepository txnRepository;
     private final LoyaltyRewardRepository rewardRepository;
     private final LoyaltyRedemptionRepository redemptionRepository;
     private final ProviderLookupPort providerLookupPort;
@@ -99,7 +99,7 @@ public class LoyaltyApplicationService {
         pointsRepository.addPoints(userId, providerId, points);
 
         LoyaltyPointsTransaction txn = new LoyaltyPointsTransaction(userId, providerId, points, reason, referenceId);
-        txnRepository.save(txn);
+        txnRepository.saveTransaction(txn);
     }
 
     @Transactional
@@ -122,7 +122,7 @@ public class LoyaltyApplicationService {
             userId, reward.getProviderId(), -reward.getPointsRequired(),
             "REDEEMED:" + reward.getName(), rewardId
         );
-        txnRepository.save(txn);
+        txnRepository.saveTransaction(txn);
 
         LoyaltyRedemption redemption = new LoyaltyRedemption(userId, rewardId, reward.getPointsRequired());
         redemption.confirm();

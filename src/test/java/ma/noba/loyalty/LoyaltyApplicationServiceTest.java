@@ -5,7 +5,7 @@ import ma.noba.loyalty.domain.model.LoyaltyReward;
 import ma.noba.loyalty.domain.port.LoyaltyPointsRepository;
 import ma.noba.loyalty.domain.port.LoyaltyRedemptionRepository;
 import ma.noba.loyalty.domain.port.LoyaltyRewardRepository;
-import ma.noba.loyalty.infra.JpaLoyaltyPointsTransactionRepository;
+import ma.noba.loyalty.domain.port.LoyaltyPointsTransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,7 +29,7 @@ import static org.mockito.Mockito.when;
 class LoyaltyApplicationServiceTest {
 
     @Mock LoyaltyPointsRepository pointsRepository;
-    @Mock JpaLoyaltyPointsTransactionRepository txnRepository;
+    @Mock LoyaltyPointsTransactionRepository txnRepository;
     @Mock LoyaltyRewardRepository rewardRepository;
     @Mock LoyaltyRedemptionRepository redemptionRepository;
     @Mock ma.noba.payment.domain.port.ProviderLookupPort providerLookupPort;
@@ -56,7 +56,7 @@ class LoyaltyApplicationServiceTest {
         assertThatThrownBy(() -> service.redeemReward(userId, rewardId))
                 .isInstanceOf(IllegalStateException.class);
 
-        verify(txnRepository, never()).save(any());
+        verify(txnRepository, never()).saveTransaction(any());
         verify(redemptionRepository, never()).save(any());
     }
 
@@ -79,7 +79,7 @@ class LoyaltyApplicationServiceTest {
         service.awardPoints(userId, providerId, 10, "SERVICE_COMPLETED", null);
 
         verify(pointsRepository).addPoints(userId, providerId, 10);
-        verify(txnRepository).save(any());
+        verify(txnRepository).saveTransaction(any());
     }
 
     @Test

@@ -1,8 +1,9 @@
-package ma.noba.shared.infra.event;
+package ma.noba.app.events;
 
 import ma.noba.shared.domain.event.DomainEvent;
 import ma.noba.shared.domain.model.OutboxEvent;
 import ma.noba.shared.domain.port.OutboxEventRepository;
+import ma.noba.shared.infra.event.RabbitMqEventBus;
 import ma.noba.shared.infra.lock.RedisDistributedLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
