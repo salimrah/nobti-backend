@@ -9,10 +9,37 @@
         <relativePath/>
     </parent>
     <groupId>ma.noba</groupId>
-    <artifactId>noba-backend</artifactId>
+    <artifactId>noba-backend-parent</artifactId>
     <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
     <name>noba-backend</name>
-    <description>noba-backend</description>
+    <description>Noba backend — modular monolith</description>
+
+    <modules>
+        <module>modules/noba-admin</module>
+        <module>modules/noba-announcement</module>
+        <module>modules/noba-badge</module>
+        <module>modules/noba-booking</module>
+        <module>modules/noba-config</module>
+        <module>modules/noba-employee</module>
+        <module>modules/noba-identity</module>
+        <module>modules/noba-kernel</module>
+        <module>modules/noba-loyalty</module>
+        <module>modules/noba-media</module>
+        <module>modules/noba-packagegift</module>
+        <module>modules/noba-payment</module>
+        <module>modules/noba-promotion</module>
+        <module>modules/noba-provider</module>
+        <module>modules/noba-providernetwork</module>
+        <module>modules/noba-qa</module>
+        <module>modules/noba-queue</module>
+        <module>modules/noba-referral</module>
+        <module>modules/noba-reminder</module>
+        <module>modules/noba-statement</module>
+        <module>modules/noba-subscription</module>
+        <module>modules/noba-user</module>
+        <module>modules/noba-app</module>
+    </modules>
 
     <properties>
         <java.version>21</java.version>
@@ -309,31 +336,6 @@
     <build>
         <plugins>
             <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.flywaydb</groupId>
-                <artifactId>flyway-maven-plugin</artifactId>
-                <configuration>
-                    <url>${env.SPRING_DATASOURCE_URL}</url>
-                    <user>${env.SPRING_DATASOURCE_USERNAME}</user>
-                    <password>${env.SPRING_DATASOURCE_PASSWORD}</password>
-                    <locations>
-                        <location>filesystem:src/main/resources/db/migration</location>
-                    </locations>
-                    <baselineOnMigrate>true</baselineOnMigrate>
-                </configuration>
-            </plugin>
-            <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>${jacoco.version}</version>
@@ -379,7 +381,7 @@
                     <effort>Max</effort>
                     <threshold>Medium</threshold>
                     <failOnError>false</failOnError>
-                    <excludeFilterFile>${project.basedir}/spotbugs-exclude.xml</excludeFilterFile>
+                    <excludeFilterFile>${maven.multiModuleProjectDirectory}/spotbugs-exclude.xml</excludeFilterFile>
                 </configuration>
                 <executions>
                     <execution>
@@ -401,5 +403,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>

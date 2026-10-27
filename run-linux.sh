@@ -58,7 +58,8 @@ case "$LAUNCH_MODE" in
   terminal|mvn|spring)
     echo ""
     echo "  Starting Spring Boot from terminal..."
-    ./mvnw clean spring-boot:run
+    ./mvnw -q -DskipTests -Dspotbugs.skip=true -Djacoco.skip=true -pl modules/noba-app -am install && \
+      ./mvnw -pl modules/noba-app spring-boot:run
     ;;
   *)
     echo ""

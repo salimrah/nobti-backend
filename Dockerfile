@@ -4,7 +4,7 @@ RUN addgroup -S noba && adduser -S noba -G noba
 
 WORKDIR /app
 
-COPY target/noba-backend-*.jar app.jar
+COPY modules/noba-app/target/noba-backend.jar app.jar
 
 RUN chown noba:noba app.jar
 

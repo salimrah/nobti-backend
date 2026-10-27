@@ -8,7 +8,7 @@
  *
  * Requirements:
  *   - Backend running with OTP codes captured to a log file (dev uses the LogTestSmsProvider).
- *       ./mvnw spring-boot:run > /tmp/noba-backend.log 2>&1 &
+ *       ./mvnw -q -DskipTests -Dspotbugs.skip=true -Djacoco.skip=true -pl modules/noba-app -am install && ./mvnw -pl modules/noba-app spring-boot:run > /tmp/noba-backend.log 2>&1 &
  *   - Postgres reachable via `docker exec -i noba-postgres-dev psql ...` (docker-compose.dev.yml).
  *
  * Usage:
@@ -102,7 +102,7 @@ async function login(phone) {
     await sleep(200);
     code = readOtp(from);
   }
-  if (!code) throw new Error(`No OTP found in ${LOG}. Start the backend with: ./mvnw spring-boot:run > ${LOG} 2>&1 &`);
+  if (!code) throw new Error(`No OTP found in ${LOG}. Start the backend with: ./mvnw -q -DskipTests -Dspotbugs.skip=true -Djacoco.skip=true -pl modules/noba-app -am install && ./mvnw -pl modules/noba-app spring-boot:run > ${LOG} 2>&1 &`);
   const token = await post('/auth/otp/verify', { challengeId: challenge.challengeId, code });
   return token.accessToken;
 }

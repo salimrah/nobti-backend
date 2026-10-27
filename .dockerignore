@@ -1,4 +1,6 @@
 target/
+modules/*/target/*
+!modules/noba-app/target/noba-backend.jar
 .git/
 .github/
 .idea/
