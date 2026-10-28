@@ -2,6 +2,7 @@ package ma.noba.provider.infra.adapter;
 
 import ma.noba.provider.application.service.ProviderApplicationService;
 import ma.noba.provider.domain.model.Provider;
+import ma.noba.provider.domain.model.ProviderService;
 import ma.noba.provider.domain.model.ProviderStatus;
 import ma.noba.provider.domain.port.service.ProviderRepository;
 import ma.noba.shared.application.dto.PagedResponse;
@@ -95,6 +96,34 @@ public class AdminProviderPortAdapter implements AdminProviderPort {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public java.util.Optional<ProviderDetail> providerDetail(UUID providerId) {
+        return providerRepository.findById(providerId).map(provider -> new ProviderDetail(
+                provider.getId(),
+                provider.getUserId(),
+                provider.getName(),
+                provider.getCategory(),
+                provider.getAddress(),
+                provider.getDescription(),
+                provider.getStatus() != null ? provider.getStatus().name() : null,
+                provider.isVerified(),
+                provider.getCreatedAt(),
+                provider.getServices().stream()
+                        .map(AdminProviderPortAdapter::toServiceRow)
+                        .toList()));
+    }
+
+    private static ServiceRow toServiceRow(ProviderService service) {
+        return new ServiceRow(
+                service.getId(),
+                service.getName(),
+                service.getCategory(),
+                service.getDuration() != null ? service.getDuration().toMinutes() : 0,
+                service.getPrice(),
+                service.isActive());
+    }
+
+    @Override
     public void approveProvider(UUID providerId) {
         providerApplicationService.approveProvider(providerId);
     }
@@ -102,5 +131,15 @@ public class AdminProviderPortAdapter implements AdminProviderPort {
     @Override
     public void rejectProvider(UUID providerId) {
         providerApplicationService.rejectProvider(providerId);
+    }
+
+    @Override
+    public void suspendProvider(UUID providerId) {
+        providerApplicationService.suspendProvider(providerId);
+    }
+
+    @Override
+    public void reactivateProvider(UUID providerId) {
+        providerApplicationService.reactivateProvider(providerId);
     }
 }

@@ -386,6 +386,28 @@ public class ProviderApplicationService {
         log.info("Provider rejected: {}", providerId);
     }
 
+    @Transactional
+    public void suspendProvider(UUID providerId) {
+        Provider provider = providerRepository.findById(providerId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found"));
+        ProviderStatus oldStatus = provider.getStatus();
+        provider.setStatus(ProviderStatus.INACTIVE);
+        providerRepository.save(provider);
+        eventBus.publish(new ProviderStatusChangedEvent(providerId, provider.getUserId(), oldStatus, ProviderStatus.INACTIVE));
+        log.info("Provider suspended by admin: {}", providerId);
+    }
+
+    @Transactional
+    public void reactivateProvider(UUID providerId) {
+        Provider provider = providerRepository.findById(providerId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found"));
+        ProviderStatus oldStatus = provider.getStatus();
+        provider.setStatus(ProviderStatus.ACTIVE);
+        providerRepository.save(provider);
+        eventBus.publish(new ProviderStatusChangedEvent(providerId, provider.getUserId(), oldStatus, ProviderStatus.ACTIVE));
+        log.info("Provider reactivated by admin: {}", providerId);
+    }
+
     @Transactional(readOnly = true)
     public List<ProviderResponse> getPendingProviders() {
         log.debug("Fetching pending providers");
