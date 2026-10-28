@@ -3,6 +3,8 @@ package ma.noba.admin.interfaces.rest;
 import ma.noba.admin.application.dto.AdminAuditResponse;
 import ma.noba.admin.application.dto.AdminPayoutView;
 import ma.noba.admin.application.dto.AdminTransactionView;
+import ma.noba.admin.application.dto.AdminUserDetailView;
+import ma.noba.admin.application.dto.UpdateUserRolesRequest;
 import ma.noba.admin.application.dto.AdminQueueDetailView;
 import ma.noba.admin.application.dto.AdminQueueView;
 import ma.noba.admin.application.dto.AdminStatsResponse;
@@ -45,10 +47,24 @@ public class AdminController {
         return ResponseEntity.ok(adminService.searchUsers(query, status, role, page, size));
     }
 
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<AdminUserDetailView> userDetail(@PathVariable UUID userId) {
+        return ResponseEntity.ok(adminService.userDetail(userId));
+    }
+
+    @PutMapping("/users/{userId}/roles")
+    public ResponseEntity<AdminUserDetailView> updateRoles(@AuthenticationPrincipal UserPrincipal principal,
+                                                           @PathVariable UUID userId,
+                                                           @RequestBody UpdateUserRolesRequest request) {
+        return ResponseEntity.ok(
+                adminService.updateRoles(principal.id(), principal.email(), userId, request.roles()));
+    }
+
     @PutMapping("/users/{userId}/suspend")
     public ResponseEntity<Void> suspendUser(@AuthenticationPrincipal UserPrincipal principal,
-                                            @PathVariable UUID userId) {
-        adminService.suspendUser(principal.id(), principal.email(), userId);
+                                            @PathVariable UUID userId,
+                                            @RequestParam(required = false) String reason) {
+        adminService.suspendUser(principal.id(), principal.email(), userId, reason);
         return ResponseEntity.ok().build();
     }
 
@@ -149,6 +165,31 @@ public class AdminController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(adminService.searchPayouts(status, page, size));
+    }
+
+    @GetMapping(value = "/exports/users.csv", produces = "text/csv")
+    public ResponseEntity<String> exportUsers(@RequestParam(required = false) String query,
+                                              @RequestParam(required = false) String status,
+                                              @RequestParam(required = false) String role) {
+        return csv("users.csv", adminService.exportUsers(query, status, role));
+    }
+
+    @GetMapping(value = "/exports/transactions.csv", produces = "text/csv")
+    public ResponseEntity<String> exportTransactions(@RequestParam(required = false) String status) {
+        return csv("transactions.csv", adminService.exportTransactions(status));
+    }
+
+    @GetMapping(value = "/exports/payouts.csv", produces = "text/csv")
+    public ResponseEntity<String> exportPayouts(@RequestParam(required = false) String status) {
+        return csv("payouts.csv", adminService.exportPayouts(status));
+    }
+
+    private static ResponseEntity<String> csv(String filename, String body) {
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + filename + "\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType("text/csv"))
+                .body(body);
     }
 
     @GetMapping("/audit")

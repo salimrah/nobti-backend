@@ -9,8 +9,20 @@ if ! docker ps >/dev/null 2>&1; then
     sleep 2
   done
 fi
-docker compose -f docker-compose.dev.yml up -d
-echo "   PostgreSQL + Redis started."
+# The local stack is broker-less: modules use the in-process event bus.
+# Pass --broker (or set EVENT_BUS_RABBITMQ_ENABLED=true) when testing the
+# RabbitMQ transport or running more than one app instance.
+LAUNCH_MODE="${1:-}"
+if [[ "$LAUNCH_MODE" == "--broker" ]]; then
+  docker compose -f docker-compose.dev.yml -f docker-compose.broker.yml --profile broker up -d
+  export EVENT_BUS_RABBITMQ_ENABLED="${EVENT_BUS_RABBITMQ_ENABLED:-true}"
+  echo "   PostgreSQL + Redis + RabbitMQ started (EVENT_BUS_RABBITMQ_ENABLED=$EVENT_BUS_RABBITMQ_ENABLED)."
+  shift
+else
+  docker compose -f docker-compose.dev.yml up -d
+  export EVENT_BUS_RABBITMQ_ENABLED="${EVENT_BUS_RABBITMQ_ENABLED:-false}"
+  echo "   PostgreSQL + Redis started (in-process events, no broker)."
+fi
 
 echo "=== 2. Waiting for Postgres health check ==="
 until docker exec noba-postgres-dev pg_isready -U postgres >/dev/null 2>&1; do
@@ -41,8 +53,7 @@ echo "   JAVA_HOME: $JAVA_HOME"
 
 echo "=== 4. Starting Spring Boot ==="
 echo ""
-LAUNCH_MODE="${1:-}"
-if [[ -z "$LAUNCH_MODE" ]]; then
+if [[ -z "${LAUNCH_MODE:-}" ]]; then
   echo -n "  Do you want to run the app from your IDE or from the terminal? [y/N]: "
   read -r response
   case "$response" in
@@ -50,7 +61,7 @@ if [[ -z "$LAUNCH_MODE" ]]; then
     *) LAUNCH_MODE="ide" ;;
   esac
 fi
-case "$LAUNCH_MODE" in
+case "${LAUNCH_MODE:-}" in
   terminal|mvn|spring)
     echo ""
     echo "  Starting Spring Boot from terminal..."

@@ -8,6 +8,7 @@ import ma.noba.shared.domain.port.AdminIdentityPort;
 import ma.noba.shared.domain.port.AdminPaymentPort;
 import ma.noba.shared.domain.port.AdminProviderPort;
 import ma.noba.shared.domain.port.AdminQueuePort;
+import ma.noba.shared.domain.port.AdminRolePort;
 import ma.noba.shared.domain.port.AdminUserDirectoryPort;
 import ma.noba.shared.domain.port.AdminUserPort;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,13 +43,14 @@ class AdminServiceTest {
     @Mock AdminUserDirectoryPort directory;
     @Mock AdminAuditService audit;
     @Mock AdminPaymentPort payments;
+    @Mock AdminRolePort roles;
 
     private AdminService service;
     private final UUID actor = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
-        service = new AdminService(identity, queues, users, providers, directory, audit, payments);
+        service = new AdminService(identity, queues, users, providers, directory, audit, payments, roles);
     }
 
     @Test
@@ -96,13 +98,16 @@ class AdminServiceTest {
     void suspendUserAudits() {
         UUID userId = UUID.randomUUID();
         when(identity.findUser(userId)).thenReturn(Optional.of(
-                new AdminIdentityPort.UserState(userId, "ACTIVE")));
+                new AdminIdentityPort.UserState(userId, "ACTIVE", "a@noba.ma", null, Instant.now())));
 
-        service.suspendUser(actor, "ops@noba.ma", userId);
+        service.suspendUser(actor, "ops@noba.ma", userId, "spam");
 
         verify(identity).suspendUser(userId);
-        verify(audit).record(actor, "ops@noba.ma", "USER_SUSPENDED", "USER", userId,
-                Map.of("previousStatus", "ACTIVE", "newStatus", "DISABLED"));
+        verify(audit).record(eq(actor), eq("ops@noba.ma"), eq("USER_SUSPENDED"), eq("USER"),
+                eq(userId), org.mockito.ArgumentMatchers.argThat(metadata ->
+                        "ACTIVE".equals(metadata.get("previousStatus"))
+                                && "DISABLED".equals(metadata.get("newStatus"))
+                                && "spam".equals(metadata.get("reason"))));
     }
 
     @Test
@@ -154,6 +159,66 @@ class AdminServiceTest {
                 eq(queueId), org.mockito.ArgumentMatchers.argThat(metadata ->
                         "ACTIVE".equals(metadata.get("previousStatus"))
                                 && "PAUSED".equals(metadata.get("newStatus"))));
+    }
+
+    @Test
+    @DisplayName("An administrator cannot change their own roles")
+    void cannotEditOwnRoles() {
+        UUID userId = UUID.randomUUID();
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.updateRoles(userId, "ops@noba.ma", userId, Set.of("USER")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("own roles");
+    }
+
+    @Test
+    @DisplayName("The last administrator cannot be demoted")
+    void cannotDemoteLastAdmin() {
+        UUID userId = UUID.randomUUID();
+        when(identity.findUser(userId)).thenReturn(Optional.of(
+                new AdminIdentityPort.UserState(userId, "ACTIVE", "a@noba.ma", null, Instant.now())));
+        when(roles.rolesOf(userId)).thenReturn(Set.of("USER", "ADMIN"));
+        when(roles.assignableRoles()).thenReturn(Set.of("USER", "PROVIDER", "ADMIN", "DELIVERER"));
+        when(roles.countAdmins()).thenReturn(1L);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.updateRoles(actor, "ops@noba.ma", userId, Set.of("USER")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("last administrator");
+    }
+
+    @Test
+    @DisplayName("Role updates keep USER, normalise names and are audited")
+    void updatesRoles() {
+        UUID userId = UUID.randomUUID();
+        when(identity.findUser(userId)).thenReturn(Optional.of(
+                new AdminIdentityPort.UserState(userId, "ACTIVE", "a@noba.ma", null, Instant.now())));
+        when(roles.assignableRoles()).thenReturn(Set.of("USER", "PROVIDER", "ADMIN", "DELIVERER"));
+        when(roles.rolesOf(userId)).thenReturn(Set.of("USER"));
+        when(directory.displayNames(any())).thenReturn(Map.of(userId, "Amine Tazi"));
+
+        var result = service.updateRoles(actor, "ops@noba.ma", userId, Set.of("provider", "unknown"));
+
+        verify(roles).replaceRoles(userId, Set.of("USER", "PROVIDER"));
+        verify(audit).record(eq(actor), eq("ops@noba.ma"), eq("USER_ROLES_CHANGED"), eq("USER"),
+                eq(userId), any());
+        assertThat(result.roles()).contains("USER");
+    }
+
+    @Test
+    @DisplayName("CSV exports include a header and one line per row")
+    void exportsCsv() {
+        when(directory.searchUsers(anyString(), any(), anyString(), anyInt(), anyInt()))
+                .thenReturn(PagedResponse.of(List.of(new AdminUserDirectoryPort.UserRow(
+                        UUID.randomUUID(), "Amine", "Tazi", "a@noba.ma", "+212700000010",
+                        UserStatus.ACTIVE, Set.of("USER"), Instant.now())), 0, 5000, 1));
+        String users = service.exportUsers("", "", "");
+        assertThat(users).startsWith("id,first_name,last_name,email,phone,status,roles,created_at");
+        assertThat(users.lines().count()).isEqualTo(2);
+
+        when(payments.searchTransactions(anyString(), anyInt(), anyInt()))
+                .thenReturn(PagedResponse.of(List.of(), 0, 5000, 0));
+        assertThat(service.exportTransactions("")).startsWith("id,user_id,provider_id,amount");
     }
 
     @Test
