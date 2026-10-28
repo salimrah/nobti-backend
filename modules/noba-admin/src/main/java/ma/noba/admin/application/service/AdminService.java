@@ -2,6 +2,7 @@ package ma.noba.admin.application.service;
 
 import ma.noba.admin.application.dto.AdminAuditResponse;
 import ma.noba.admin.application.dto.AdminPayoutView;
+import ma.noba.admin.application.dto.AdminProviderDetailView;
 import ma.noba.admin.application.dto.AdminTransactionView;
 import ma.noba.admin.application.dto.AdminQueueDetailView;
 import ma.noba.admin.application.dto.AdminQueueView;
@@ -121,6 +122,43 @@ public class AdminService {
         return adminProviderPort.pendingProviders();
     }
 
+    @Transactional(readOnly = true)
+    public AdminProviderDetailView providerDetail(UUID providerId) {
+        AdminProviderPort.ProviderDetail provider = adminProviderPort.providerDetail(providerId)
+                .orElseThrow(() -> new NoSuchElementException("Provider not found"));
+        String ownerName = adminUserDirectoryPort.displayNames(List.of(provider.userId()))
+                .getOrDefault(provider.userId(), "Owner");
+        AdminIdentityPort.UserState owner = adminIdentityPort.findUser(provider.userId()).orElse(null);
+        return new AdminProviderDetailView(
+                provider.id(),
+                provider.userId(),
+                ownerName,
+                owner != null ? owner.email() : null,
+                owner != null ? owner.phone() : null,
+                provider.name(),
+                provider.category(),
+                provider.address(),
+                provider.description(),
+                provider.status(),
+                provider.verified(),
+                provider.createdAt(),
+                provider.services().stream()
+                        .map(service -> new AdminProviderDetailView.Service(
+                                service.id(), service.name(), service.category(),
+                                service.durationMinutes(), service.price(), service.active()))
+                        .toList());
+    }
+
+    @Transactional
+    public void suspendProvider(UUID actorId, String actorLabel, UUID providerId) {
+        changeProviderStatus(actorId, actorLabel, providerId, "PROVIDER_SUSPENDED", "INACTIVE");
+    }
+
+    @Transactional
+    public void reactivateProvider(UUID actorId, String actorLabel, UUID providerId) {
+        changeProviderStatus(actorId, actorLabel, providerId, "PROVIDER_REACTIVATED", "ACTIVE");
+    }
+
     @Transactional
     public void approveProvider(UUID actorId, String actorLabel, UUID providerId) {
         changeProviderStatus(actorId, actorLabel, providerId, "PROVIDER_APPROVED", "ACTIVE");
@@ -137,10 +175,16 @@ public class AdminService {
                 .orElseThrow(() -> new NoSuchElementException("Provider not found"));
         Map<String, Object> metadata = statusChange(before.status(), newStatus);
         metadata.put("name", before.name());
-        if ("ACTIVE".equals(newStatus)) {
-            adminProviderPort.approveProvider(providerId);
-        } else {
-            adminProviderPort.rejectProvider(providerId);
+        switch (newStatus) {
+            case "ACTIVE" -> {
+                if ("PROVIDER_REACTIVATED".equals(action)) {
+                    adminProviderPort.reactivateProvider(providerId);
+                } else {
+                    adminProviderPort.approveProvider(providerId);
+                }
+            }
+            case "INACTIVE" -> adminProviderPort.suspendProvider(providerId);
+            default -> adminProviderPort.rejectProvider(providerId);
         }
         auditService.record(actorId, resolveActor(actorId, actorLabel), action, "PROVIDER", providerId, metadata);
     }

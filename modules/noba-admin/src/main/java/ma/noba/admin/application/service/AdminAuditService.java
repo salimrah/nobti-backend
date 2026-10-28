@@ -5,6 +5,7 @@ import ma.noba.admin.application.dto.AdminAuditResponse;
 import ma.noba.admin.domain.model.AdminAuditEvent;
 import ma.noba.admin.domain.port.AdminAuditRepository;
 import ma.noba.shared.application.dto.PagedResponse;
+import ma.noba.shared.domain.port.AdminAuditPort;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -20,10 +21,11 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
-public class AdminAuditService {
+public class AdminAuditService implements AdminAuditPort {
 
     private final AdminAuditRepository repository;
 
+    @Override
     @Transactional
     public void record(UUID actorId, String actorLabel, String action, String targetType,
                        UUID targetId, Map<String, Object> metadata) {

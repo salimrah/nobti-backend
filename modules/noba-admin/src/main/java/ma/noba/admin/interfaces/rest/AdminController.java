@@ -2,6 +2,7 @@ package ma.noba.admin.interfaces.rest;
 
 import ma.noba.admin.application.dto.AdminAuditResponse;
 import ma.noba.admin.application.dto.AdminPayoutView;
+import ma.noba.admin.application.dto.AdminProviderDetailView;
 import ma.noba.admin.application.dto.AdminTransactionView;
 import ma.noba.admin.application.dto.AdminUserDetailView;
 import ma.noba.admin.application.dto.UpdateUserRolesRequest;
@@ -82,6 +83,25 @@ public class AdminController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(adminService.searchProviders(query, status, page, size));
+    }
+
+    @GetMapping("/providers/{providerId}")
+    public ResponseEntity<AdminProviderDetailView> providerDetail(@PathVariable UUID providerId) {
+        return ResponseEntity.ok(adminService.providerDetail(providerId));
+    }
+
+    @PutMapping("/providers/{providerId}/suspend")
+    public ResponseEntity<Void> suspendProvider(@AuthenticationPrincipal UserPrincipal principal,
+                                                @PathVariable UUID providerId) {
+        adminService.suspendProvider(principal.id(), principal.email(), providerId);
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/providers/{providerId}/reactivate")
+    public ResponseEntity<Void> reactivateProvider(@AuthenticationPrincipal UserPrincipal principal,
+                                                   @PathVariable UUID providerId) {
+        adminService.reactivateProvider(principal.id(), principal.email(), providerId);
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/providers/pending")
