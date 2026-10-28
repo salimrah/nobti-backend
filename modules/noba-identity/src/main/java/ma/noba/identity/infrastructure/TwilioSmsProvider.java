@@ -1,10 +1,8 @@
 package ma.noba.identity.infrastructure;
 
-import com.twilio.Twilio;
 import com.twilio.rest.api.v2010.account.Message;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import ma.noba.config.ResilienceConfig;
 import ma.noba.identity.domain.service.SmsGateway;
@@ -21,12 +19,7 @@ public class TwilioSmsProvider implements SmsGateway {
 
     private static final Logger log = LoggerFactory.getLogger(TwilioSmsProvider.class);
 
-    @Value("${providers.twilio.accountSid}") String accountSid;
-    @Value("${providers.twilio.authToken}") String authToken;
-    @Value("${providers.twilio.smsFrom}") String smsFrom;
-
-    @PostConstruct
-    void init(){ Twilio.init(accountSid, authToken); }
+    @Value("${otp.providers.sms.from:}") String smsFrom;
 
     @Override
     @CircuitBreaker(name = ResilienceConfig.EXTERNAL_SERVICE, fallbackMethod = "sendFallback")
