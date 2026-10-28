@@ -30,6 +30,9 @@ public interface ProviderRepository {
     /** Server-side text search over active providers (name/description). */
     Page<Provider> searchActive(String query, Pageable pageable);
 
+    /** Admin view: every status, filtered by text and optional status. */
+    Page<Provider> adminSearch(String query, ProviderStatus status, Pageable pageable);
+
     Page<ProviderDistanceProjection> findNearbyIds(double lat, double lon, double radiusKm, Pageable pageable);
 
     Page<ProviderDistanceProjection> findNearbyIdsWithPostGis(double lat, double lon, double radiusKm, Pageable pageable);

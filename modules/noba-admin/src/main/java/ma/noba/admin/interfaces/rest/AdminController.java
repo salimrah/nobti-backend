@@ -1,6 +1,7 @@
 package ma.noba.admin.interfaces.rest;
 
 import ma.noba.admin.application.dto.AdminStatsResponse;
+import ma.noba.shared.application.dto.PagedResponse;
 import ma.noba.admin.application.service.AdminService;
 import ma.noba.shared.domain.port.AdminProviderPort;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +38,25 @@ public class AdminController {
     public ResponseEntity<Void> activateUser(@PathVariable UUID userId) {
         adminService.activateUser(userId);
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/users")
+    public ResponseEntity<PagedResponse<ma.noba.shared.domain.port.AdminUserDirectoryPort.UserRow>> searchUsers(
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String role,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(adminService.searchUsers(query, status, role, page, size));
+    }
+
+    @GetMapping("/providers")
+    public ResponseEntity<PagedResponse<ma.noba.shared.domain.port.AdminProviderPort.ProviderRow>> searchProviders(
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(adminService.searchProviders(query, status, page, size));
     }
 
     @GetMapping("/providers/pending")
