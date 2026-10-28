@@ -1,7 +1,8 @@
 # Noba production reverse proxy (Caddy 2).
 # - Automatic HTTPS via Let's Encrypt
+# - API host: the Spring Boot backend
+# - Admin host: the Noba Ops console (static SPA) + same-origin /api proxy
 # - WebSocket/SSE passthrough for queue realtime (STOMP over SockJS)
-# - gzip/zstd compression
 {
 	email {$ACME_EMAIL}
 }
@@ -22,6 +23,33 @@
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+{$ADMIN_DOMAIN} {
+	encode zstd gzip
+
+	# The console calls the API same-origin, so browsers never need CORS here.
+	handle /api/* {
+		reverse_proxy noba-backend:8080
+	}
+
+	handle {
+		reverse_proxy nobti-admin:80
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
 		-Server
 	}
 

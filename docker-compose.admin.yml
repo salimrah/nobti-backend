@@ -1,0 +1,16 @@
+# Admin console (Noba Ops) — merge with docker-compose.prod.yml.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.admin.yml up -d
+#
+# ADMIN_IMAGE may point at the published image (default) or a locally loaded tag.
+services:
+  nobti-admin:
+    image: ${ADMIN_IMAGE:-ghcr.io/salimrah/nobti-admin:latest}
+    container_name: nobti-admin
+    restart: unless-stopped
+    networks:
+      - noba-network
+
+  caddy:
+    environment:
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?ADMIN_DOMAIN must be set (e.g. admin.example.com)}
