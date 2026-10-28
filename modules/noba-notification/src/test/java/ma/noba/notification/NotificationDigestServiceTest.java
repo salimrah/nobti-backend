@@ -59,21 +59,27 @@ class NotificationDigestServiceTest {
     }
 
     @Test
-    @DisplayName("Daily digests are due only inside the digest hour")
+    @DisplayName("The daily window is today's digest hour, or yesterday's before it happens")
     void dailyWindow() {
         var digest = new NotificationPreferencePort.Digest(DigestFrequency.DAILY, "UTC");
 
-        assertThat(NotificationDigestService.due(digest, utc(2026, 10, 28, 9), 9)).isTrue();
-        assertThat(NotificationDigestService.due(digest, utc(2026, 10, 28, 10), 9)).isFalse();
+        assertThat(NotificationDigestService.windowStart(digest, utc(2026, 10, 28, 10), 9))
+                .isEqualTo(utc(2026, 10, 28, 9));
+        assertThat(NotificationDigestService.windowStart(digest, utc(2026, 10, 28, 8), 9))
+                .isEqualTo(utc(2026, 10, 27, 9));
     }
 
     @Test
-    @DisplayName("Weekly digests only fire on Monday")
+    @DisplayName("The weekly window is this Monday's digest hour, or last Monday's before it")
     void weeklyWindow() {
         var digest = new NotificationPreferencePort.Digest(DigestFrequency.WEEKLY, "UTC");
 
-        assertThat(NotificationDigestService.due(digest, utc(2026, 11, 2, 9), 9)).isTrue();
-        assertThat(NotificationDigestService.due(digest, utc(2026, 11, 3, 9), 9)).isFalse();
+        // Wednesday -> Monday of the same week.
+        assertThat(NotificationDigestService.windowStart(digest, utc(2026, 10, 28, 10), 9))
+                .isEqualTo(utc(2026, 10, 26, 9));
+        // Monday before the hour -> the previous Monday.
+        assertThat(NotificationDigestService.windowStart(digest, utc(2026, 11, 2, 8), 9))
+                .isEqualTo(utc(2026, 10, 26, 9));
     }
 
     @Test
@@ -102,12 +108,12 @@ class NotificationDigestServiceTest {
 
         when(preferences.digest(userId)).thenReturn(Optional.of(
                 new NotificationPreferencePort.Digest(DigestFrequency.DAILY, "UTC")));
-        when(entries.findPendingByUserId(userId)).thenReturn(List.of(a, b));
+        when(entries.findPendingBefore(userId, utc(2026, 10, 28, 9))).thenReturn(List.of(a, b));
         when(notifications.findById(first.getId())).thenReturn(Optional.of(first));
         when(notifications.findById(second.getId())).thenReturn(Optional.of(second));
         when(application.send(any())).thenReturn(digestId);
 
-        boolean processed = service.flush(userId, utc(2026, 10, 28, 9));
+        boolean processed = service.flush(userId, utc(2026, 10, 28, 10));
 
         assertThat(processed).isTrue();
         ArgumentCaptor<NotificationPort.Command> captor = ArgumentCaptor.forClass(NotificationPort.Command.class);
@@ -117,19 +123,37 @@ class NotificationDigestServiceTest {
         assertThat(command.category()).isEqualTo(NotificationPort.Category.SYSTEM);
         assertThat(command.body()).contains("2 new updates").contains("Promo A");
         assertThat(command.data()).containsEntry("count", "2");
-        verify(entries).markDigested(userId, digestId);
+        verify(entries).markDigestedBefore(userId, digestId, utc(2026, 10, 28, 9));
     }
 
     @Test
-    @DisplayName("Nothing is sent before the digest hour")
-    void waitsForWindow() {
+    @DisplayName("Entries that arrived after the window wait for the next one")
+    void waitsForNextWindow() {
         when(preferences.digest(userId)).thenReturn(Optional.of(
-                new NotificationPreferencePort.Digest(DigestFrequency.DAILY, "UTC")));
+                new NotificationPreferencePort.Digest(DigestFrequency.WEEKLY, "UTC")));
+        when(entries.findPendingBefore(userId, utc(2026, 10, 26, 9))).thenReturn(List.of());
 
-        boolean processed = service.flush(userId, utc(2026, 10, 28, 8));
+        boolean processed = service.flush(userId, utc(2026, 10, 28, 10));
 
         assertThat(processed).isFalse();
         verify(application, never()).send(any());
-        verify(entries, never()).markDigested(any(), any());
+        verify(entries, never()).markDigestedBefore(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("A missed digest hour is caught up on the next run")
+    void catchesUpAfterMissedHour() {
+        Notification item = notification("Promo");
+        NotificationDigestEntry entry = NotificationDigestEntry.of(userId, item.getId());
+        UUID digestId = UUID.randomUUID();
+        when(preferences.digest(userId)).thenReturn(Optional.of(
+                new NotificationPreferencePort.Digest(DigestFrequency.DAILY, "UTC")));
+        when(entries.findPendingBefore(userId, utc(2026, 10, 28, 9))).thenReturn(List.of(entry));
+        when(notifications.findById(item.getId())).thenReturn(Optional.of(item));
+        when(application.send(any())).thenReturn(digestId);
+
+        // 14:00: the 09:00 window was missed but is still open.
+        assertThat(service.flush(userId, utc(2026, 10, 28, 14))).isTrue();
+        verify(entries).markDigestedBefore(userId, digestId, utc(2026, 10, 28, 9));
     }
 }

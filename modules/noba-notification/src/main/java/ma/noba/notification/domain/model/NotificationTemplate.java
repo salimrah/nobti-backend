@@ -3,7 +3,6 @@ package ma.noba.notification.domain.model;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
 import java.time.Instant;
 import java.util.UUID;
 
@@ -41,6 +40,14 @@ public class NotificationTemplate {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    public void activate() {
+        this.active = true;
+    }
+
+    public void deactivate() {
+        this.active = false;
+    }
+
     public static NotificationTemplate of(String templateKey, String locale, int version,
                                           String subject, String body) {
         NotificationTemplate template = new NotificationTemplate();
@@ -54,5 +61,11 @@ public class NotificationTemplate {
         template.active = true;
         template.createdAt = Instant.now();
         return template;
+    }
+
+    /** A new version of the same key + locale, owning the copy (activation is a separate step). */
+    public static NotificationTemplate version(String templateKey, String locale, int version,
+                                               String subject, String body) {
+        return of(templateKey, locale, version, subject, body);
     }
 }

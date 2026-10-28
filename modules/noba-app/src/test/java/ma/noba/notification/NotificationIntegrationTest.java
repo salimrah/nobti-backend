@@ -1,6 +1,9 @@
 package ma.noba.notification;
 
+import ma.noba.notification.application.dto.CreateTemplateRequest;
+import ma.noba.notification.application.dto.TemplateResponse;
 import ma.noba.notification.application.service.NotificationDigestService;
+import ma.noba.notification.application.service.NotificationTemplateAdminService;
 import ma.noba.notification.application.service.NotificationReceiptService;
 import ma.noba.notification.domain.model.DigestFrequency;
 import ma.noba.notification.domain.model.Notification;
@@ -52,10 +55,17 @@ class NotificationIntegrationTest extends AbstractIntegrationTest {
     @Autowired NotificationDigestService digestService;
     @Autowired NotificationReceiptService receipts;
     @Autowired NotificationAnalyticsRepository analytics;
+    @Autowired NotificationTemplateAdminService templateAdmin;
     @Autowired PlatformTransactionManager transactions;
 
     private static Instant utc(int month, int day, int hour) {
         return ZonedDateTime.of(2026, month, day, hour, 0, 0, 0, ZoneOffset.UTC).toInstant();
+    }
+
+    /** A moment just after tomorrow's digest hour, so entries created now fall inside the window. */
+    private static Instant afterTomorrowsDigest() {
+        return ZonedDateTime.now(ZoneOffset.UTC).plusDays(1)
+                .withHour(9).withMinute(5).withSecond(0).withNano(0).toInstant();
     }
 
     @Test
@@ -96,6 +106,41 @@ class NotificationIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("Publishing a new version switches the copy the renderer resolves")
+    void templateVersioning() {
+        TemplateResponse v1 = templateAdmin.create(new CreateTemplateRequest(
+                "versioned.copy", "en", "Version one", "First body", true));
+        assertThat(v1.version()).isEqualTo(1);
+
+        UUID userId = UUID.randomUUID();
+        UUID first = notificationPort.send(new NotificationPort.Command(
+                userId, "versioned.copy", NotificationPort.Category.TRANSACTIONAL, 1,
+                "fallback", "fallback", Map.of(), "version-1:" + userId,
+                "en", Set.of(NotificationPort.Channel.IN_APP), null, null));
+        assertThat(notifications.findById(first).orElseThrow().getTitle()).isEqualTo("Version one");
+
+        TemplateResponse v2 = templateAdmin.create(new CreateTemplateRequest(
+                "versioned.copy", "en", "Version two", "Second body", true));
+        assertThat(v2.version()).isEqualTo(2);
+
+        UUID second = notificationPort.send(new NotificationPort.Command(
+                userId, "versioned.copy", NotificationPort.Category.TRANSACTIONAL, 1,
+                "fallback", "fallback", Map.of(), "version-2:" + userId,
+                "en", Set.of(NotificationPort.Channel.IN_APP), null, null));
+        assertThat(notifications.findById(second).orElseThrow().getTitle()).isEqualTo("Version two");
+
+        // Rolling back to v1 takes effect immediately.
+        templateAdmin.setActive(v1.id(), true);
+        UUID third = notificationPort.send(new NotificationPort.Command(
+                userId, "versioned.copy", NotificationPort.Category.TRANSACTIONAL, 1,
+                "fallback", "fallback", Map.of(), "version-3:" + userId,
+                "en", Set.of(NotificationPort.Channel.IN_APP), null, null));
+        assertThat(notifications.findById(third).orElseThrow().getTitle()).isEqualTo("Version one");
+
+        assertThat(templates.findActive("versioned.copy", "en").orElseThrow().getVersion()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("A marketing notification is held for the digest and flushed into one summary")
     void digestBatching() {
         UUID userId = UUID.randomUUID();
@@ -118,7 +163,10 @@ class NotificationIntegrationTest extends AbstractIntegrationTest {
                 .extracting(NotificationDelivery::getChannel)
                 .containsExactly(NotificationChannel.IN_APP);
 
-        assertThat(digestService.flush(userId, utc(10, 28, 9))).isTrue();
+        // Nothing is sent before the window closes.
+        assertThat(digestService.flush(userId, Instant.now().minusSeconds(86_400))).isFalse();
+
+        assertThat(digestService.flush(userId, afterTomorrowsDigest())).isTrue();
 
         assertThat(digestEntries.findPendingByUserId(userId)).isEmpty();
         List<Notification> summaries = notifications
@@ -193,7 +241,7 @@ class NotificationIntegrationTest extends AbstractIntegrationTest {
         optedOut.update(null, null, "UTC", "NONE");
         settings.saveSetting(optedOut);
 
-        assertThat(digestService.flush(userId, utc(10, 28, 9))).isTrue();
+        assertThat(digestService.flush(userId, afterTomorrowsDigest())).isTrue();
 
         assertThat(digestEntries.findPendingByUserId(userId)).isEmpty();
         assertThat(deliveries.findByNotificationId(id))
