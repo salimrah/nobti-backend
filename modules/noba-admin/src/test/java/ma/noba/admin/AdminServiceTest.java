@@ -5,6 +5,7 @@ import ma.noba.admin.application.service.AdminService;
 import ma.noba.shared.application.dto.PagedResponse;
 import ma.noba.shared.domain.model.UserStatus;
 import ma.noba.shared.domain.port.AdminIdentityPort;
+import ma.noba.shared.domain.port.AdminPaymentPort;
 import ma.noba.shared.domain.port.AdminProviderPort;
 import ma.noba.shared.domain.port.AdminQueuePort;
 import ma.noba.shared.domain.port.AdminUserDirectoryPort;
@@ -40,13 +41,14 @@ class AdminServiceTest {
     @Mock AdminProviderPort providers;
     @Mock AdminUserDirectoryPort directory;
     @Mock AdminAuditService audit;
+    @Mock AdminPaymentPort payments;
 
     private AdminService service;
     private final UUID actor = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
-        service = new AdminService(identity, queues, users, providers, directory, audit);
+        service = new AdminService(identity, queues, users, providers, directory, audit, payments);
     }
 
     @Test

@@ -13,5 +13,10 @@ public interface PayoutRepository {
     Payout save(Payout payout);
     Optional<Payout> findById(UUID id);
     Page<Payout> findByProviderId(UUID providerId, Pageable pageable);
+
+    Page<Payout> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    Page<Payout> findByStatusOrderByCreatedAtDesc(ma.noba.payment.domain.model.PayoutStatus status,
+                                                  Pageable pageable);
     List<Payout> findByProviderIdAndStatus(UUID providerId, PayoutStatus status);
 }
