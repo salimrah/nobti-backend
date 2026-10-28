@@ -10,8 +10,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -69,6 +73,25 @@ public class AdminProviderPortAdapter implements AdminProviderPort {
                 provider.getAddress(),
                 provider.isVerified(),
                 provider.getCreatedAt());
+    }
+
+    @Override
+    public Optional<ProviderState> findProvider(UUID providerId) {
+        return providerRepository.findById(providerId)
+                .map(p -> new ProviderState(p.getId(), p.getUserId(), p.getName(),
+                        p.getStatus() != null ? p.getStatus().name() : null));
+    }
+
+    @Override
+    public Map<UUID, String> names(Collection<UUID> providerIds) {
+        if (providerIds == null || providerIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, String> names = new HashMap<>();
+        for (Provider provider : providerRepository.findAllById(providerIds)) {
+            names.put(provider.getId(), provider.getName());
+        }
+        return names;
     }
 
     @Override
