@@ -3,6 +3,7 @@ package ma.noba.notification;
 import ma.noba.notification.application.dto.CreateTemplateRequest;
 import ma.noba.notification.application.dto.TemplateResponse;
 import ma.noba.notification.application.service.NotificationDigestService;
+import ma.noba.notification.application.service.NotificationEventExportService;
 import ma.noba.notification.application.service.NotificationTemplateAdminService;
 import ma.noba.notification.application.service.NotificationReceiptService;
 import ma.noba.notification.domain.model.DigestFrequency;
@@ -56,6 +57,7 @@ class NotificationIntegrationTest extends AbstractIntegrationTest {
     @Autowired NotificationReceiptService receipts;
     @Autowired NotificationAnalyticsRepository analytics;
     @Autowired NotificationTemplateAdminService templateAdmin;
+    @Autowired NotificationEventExportService eventExport;
     @Autowired PlatformTransactionManager transactions;
 
     private static Instant utc(int month, int day, int hour) {
@@ -103,6 +105,30 @@ class NotificationIntegrationTest extends AbstractIntegrationTest {
         assertThat(saved.getBody()).isEqualTo("Présentez-vous dans 5 minutes.");
         assertThat(saved.getTemplateKey()).isEqualTo("test.turn_start");
         assertThat(saved.getTemplateVersion()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("The warehouse export pseudonymizes users and paginates by event id")
+    void warehouseExport() {
+        UUID userId = UUID.randomUUID();
+        UUID id = notificationPort.send(new NotificationPort.Command(
+                userId, "export.test", NotificationPort.Category.TRANSACTIONAL, 1,
+                "Export", "Body", Map.of(), "export:" + userId,
+                "en", Set.of(NotificationPort.Channel.PUSH), null, null));
+
+        Instant to = Instant.now().plusSeconds(60);
+        Instant from = to.minusSeconds(3600);
+        var page = eventExport.events(from, to, 0, 1000);
+
+        assertThat(page.rows()).isGreaterThanOrEqualTo(2); // CREATED + QUEUED
+        assertThat(page.csv()).contains("CREATED").contains("export.test");
+        assertThat(page.csv()).doesNotContain(userId.toString());
+        assertThat(page.csv()).containsPattern("u_[0-9a-f]{32}");
+
+        // A second page after the cursor starts past the first page.
+        var next = eventExport.events(from, to, page.nextAfter(), 1000);
+        assertThat(next.rows()).isZero();
+        assertThat(notifications.findById(id)).isPresent();
     }
 
     @Test
