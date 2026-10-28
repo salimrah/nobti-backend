@@ -1,23 +1,21 @@
 package ma.noba.reminder.infra;
 
-import com.google.firebase.messaging.FirebaseMessaging;
-import com.google.firebase.messaging.FirebaseMessagingException;
-import com.google.firebase.messaging.Message;
-import com.google.firebase.messaging.Notification;
 import ma.noba.reminder.domain.model.ServiceReminder;
 import ma.noba.reminder.domain.port.ServiceReminderRepository;
+import ma.noba.shared.domain.exception.PushDeliveryException;
 import ma.noba.shared.domain.port.FcmTokenQueryPort;
+import ma.noba.shared.domain.port.PushGateway;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
 @Component
 @ConditionalOnProperty(name = "reminder.notification.enabled", havingValue = "true", matchIfMissing = true)
@@ -27,14 +25,14 @@ public class ReminderNotificationJob {
 
     private final ServiceReminderRepository reminderRepository;
     private final FcmTokenQueryPort fcmTokenQueryPort;
-    private final FirebaseMessaging firebaseMessaging;
+    private final PushGateway pushGateway;
 
     public ReminderNotificationJob(ServiceReminderRepository reminderRepository,
                                    FcmTokenQueryPort fcmTokenQueryPort,
-                                   Optional<FirebaseMessaging> firebaseMessaging) {
+                                   PushGateway pushGateway) {
         this.reminderRepository = reminderRepository;
         this.fcmTokenQueryPort = fcmTokenQueryPort;
-        this.firebaseMessaging = firebaseMessaging.orElse(null);
+        this.pushGateway = pushGateway;
     }
 
     @Transactional
@@ -59,47 +57,29 @@ public class ReminderNotificationJob {
     }
 
     private void sendNotification(ServiceReminder reminder) {
-        if (firebaseMessaging == null) {
-            log.info("[MOCK] Service reminder for user {}: {}", reminder.getUserId(), reminder.getServiceName());
-            reminder.snooze();
-            reminderRepository.save(reminder);
-            return;
-        }
-
         String token = fcmTokenQueryPort.findFcmTokenByUserId(reminder.getUserId()).orElse(null);
         if (token == null) {
-            log.warn("No FCM token for user {}, marking reminder inactive", reminder.getUserId());
+            log.warn("No push token for user {}, marking reminder inactive", reminder.getUserId());
             reminder.setActive(false);
             reminderRepository.save(reminder);
             return;
         }
 
+        String body = "It's time for your " + reminder.getServiceName()
+                + " at " + reminder.getProviderName() + "!";
         try {
-            Message message = Message.builder()
-                .setToken(token)
-                .setNotification(Notification.builder()
-                    .setTitle("Service Reminder")
-                    .setBody("It's time for your " + reminder.getServiceName() + " at " + reminder.getProviderName() + "!")
-                    .build())
-                .putData("type", "service_reminder")
-                .putData("reminderId", reminder.getId().toString())
-                .putData("providerId", reminder.getProviderId().toString())
-                .putData("serviceName", reminder.getServiceName())
-                .build();
-
-            firebaseMessaging.send(message);
+            pushGateway.send(token, "Service Reminder", body, Map.of(
+                    "type", "service_reminder",
+                    "reminderId", reminder.getId().toString(),
+                    "providerId", reminder.getProviderId().toString(),
+                    "serviceName", reminder.getServiceName()));
             log.info("Service reminder notification sent to user {}", reminder.getUserId());
-        } catch (FirebaseMessagingException e) {
+        } catch (PushDeliveryException e) {
             log.error("Failed to send reminder notification to user {}", reminder.getUserId(), e);
-            handleError(token, e);
-        }
-    }
-
-    private void handleError(String token, FirebaseMessagingException e) {
-        String code = e.getMessagingErrorCode() != null ? e.getMessagingErrorCode().name() : "";
-        if (code.equals("UNREGISTERED") || code.equals("INVALID_ARGUMENT")) {
-            log.info("Removing invalid FCM token");
-            fcmTokenQueryPort.invalidateToken(token);
+            if (e.isInvalidToken()) {
+                log.info("Removing invalid push token for user {}", reminder.getUserId());
+                fcmTokenQueryPort.invalidateToken(token);
+            }
         }
     }
 }

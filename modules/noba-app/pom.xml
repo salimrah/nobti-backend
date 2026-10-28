@@ -142,6 +142,11 @@
             <scope>runtime</scope>
             <optional>true</optional>
         </dependency>
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.4.3</version>
+        </dependency>
     </dependencies>
     <build>
         <finalName>noba-backend</finalName>
