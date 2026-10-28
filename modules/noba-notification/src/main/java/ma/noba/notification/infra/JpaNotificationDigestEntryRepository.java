@@ -35,6 +35,14 @@ public interface JpaNotificationDigestEntryRepository
         return findByUserIdAndDigestIdIsNullOrderByCreatedAtAsc(userId);
     }
 
+    List<NotificationDigestEntry> findByUserIdAndDigestIdIsNullAndCreatedAtBeforeOrderByCreatedAtAsc(
+            UUID userId, java.time.Instant cutoff);
+
+    @Override
+    default List<NotificationDigestEntry> findPendingBefore(UUID userId, java.time.Instant cutoff) {
+        return findByUserIdAndDigestIdIsNullAndCreatedAtBeforeOrderByCreatedAtAsc(userId, cutoff);
+    }
+
     Optional<NotificationDigestEntry> findByNotificationId(UUID notificationId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
@@ -45,6 +53,17 @@ public interface JpaNotificationDigestEntryRepository
     @Override
     default int markDigested(UUID userId, UUID digestId) {
         return linkPending(userId, digestId);
+    }
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update NotificationDigestEntry e set e.digestId = :digestId " +
+            "where e.userId = :userId and e.digestId is null and e.createdAt < :cutoff")
+    int linkPendingBefore(@Param("userId") UUID userId, @Param("digestId") UUID digestId,
+                          @Param("cutoff") java.time.Instant cutoff);
+
+    @Override
+    default int markDigestedBefore(UUID userId, UUID digestId, java.time.Instant cutoff) {
+        return linkPendingBefore(userId, digestId, cutoff);
     }
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
