@@ -26,6 +26,7 @@ import ma.noba.shared.domain.event.EventBus;
 import ma.noba.shared.domain.exception.NotFoundException;
 import ma.noba.shared.domain.exception.BusinessException;
 import ma.noba.shared.domain.exception.ErrorCode;
+import ma.noba.provider.domain.port.ProviderSearchPort;
 import ma.noba.provider.domain.port.ProviderSubscriptionPort;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -50,6 +51,7 @@ public class ProviderApplicationService {
     private final ServiceCategoryRepository serviceCategoryRepository;
     private final ProviderProvisioningPort provisioningPort;
     private final ProviderSubscriptionPort subscriptionPort;
+    private final ProviderSearchPort providerSearchPort;
     private final BusinessHoursRepository businessHoursRepository;
     private final EventBus eventBus;
 
@@ -60,6 +62,7 @@ public class ProviderApplicationService {
             ServiceCategoryRepository serviceCategoryRepository,
             ProviderProvisioningPort provisioningPort,
             ProviderSubscriptionPort subscriptionPort,
+            ProviderSearchPort providerSearchPort,
             BusinessHoursRepository businessHoursRepository,
             EventBus eventBus) {
         this.providerRepository = providerRepository;
@@ -68,6 +71,7 @@ public class ProviderApplicationService {
         this.serviceCategoryRepository = serviceCategoryRepository;
         this.provisioningPort = provisioningPort;
         this.subscriptionPort = subscriptionPort;
+        this.providerSearchPort = providerSearchPort;
         this.businessHoursRepository = businessHoursRepository;
         this.eventBus = eventBus;
     }
@@ -223,7 +227,7 @@ public class ProviderApplicationService {
 
     @Transactional(readOnly = true)
     public PagedResponse<ProviderResponse> searchByText(String query, Pageable pageable) {
-        return toPagedResponse(providerRepository.searchActive(query, pageable));
+        return toPagedResponse(providerSearchPort.search(query, pageable));
     }
 
     @Transactional(readOnly = true)
