@@ -21,7 +21,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -79,7 +84,7 @@ public class NotificationApplicationService implements NotificationPort {
             NotificationDelivery delivery = NotificationDelivery.queued(
                     notificationId, channel, channel.name().toLowerCase(), recipient);
 
-            if (!preferences.isEnabled(command.userId(), channel)) {
+            if (!preferences.isEnabled(command.userId(), category, channel)) {
                 delivery.markSuppressed("PREFERENCE_DISABLED", "channel disabled by the user");
                 deliveries.saveDelivery(delivery);
                 events.record(NotificationEvent.of(notificationId, delivery.getId(),
@@ -89,9 +94,20 @@ public class NotificationApplicationService implements NotificationPort {
                 continue;
             }
 
+            Instant deferredUntil = category == NotificationCategory.MARKETING
+                    ? deferredUntil(preferences.quietHours(command.userId())).orElse(null)
+                    : null;
+            if (deferredUntil != null) {
+                delivery.setNextAttemptAt(deferredUntil);
+            }
             deliveries.saveDelivery(delivery);
+            Map<String, Object> queueMetadata = new HashMap<>();
+            queueMetadata.put("channel", channel.name());
+            if (deferredUntil != null) {
+                queueMetadata.put("deferredUntil", deferredUntil.toString());
+            }
             events.record(NotificationEvent.of(notificationId, delivery.getId(),
-                    NotificationEventType.QUEUED, Map.of("channel", channel.name())));
+                    NotificationEventType.QUEUED, queueMetadata));
             pending = true;
         }
 
@@ -129,6 +145,33 @@ public class NotificationApplicationService implements NotificationPort {
     @Transactional
     public int markAllRead(UUID userId) {
         return notifications.markAllRead(userId, Instant.now());
+    }
+
+    /** Returns the end of quiet hours when the user is currently inside them. */
+    private static Optional<Instant> deferredUntil(Optional<NotificationPreferencePort.QuietHours> quietHours) {
+        if (quietHours.isEmpty()) {
+            return Optional.empty();
+        }
+        NotificationPreferencePort.QuietHours window = quietHours.get();
+        ZoneId zone;
+        try {
+            zone = ZoneId.of(window.timezone());
+        } catch (Exception e) {
+            zone = ZoneId.systemDefault();
+        }
+        ZonedDateTime now = ZonedDateTime.now(zone);
+        LocalTime time = now.toLocalTime();
+        boolean quiet = window.start().isBefore(window.end())
+                ? !time.isBefore(window.start()) && time.isBefore(window.end())
+                : !time.isBefore(window.start()) || time.isBefore(window.end());
+        if (!quiet) {
+            return Optional.empty();
+        }
+        ZonedDateTime end = now.with(window.end());
+        if (!end.isAfter(now)) {
+            end = end.plusDays(1);
+        }
+        return Optional.of(end.toInstant());
     }
 
     private static String recipientFor(NotificationChannel channel, Command command) {

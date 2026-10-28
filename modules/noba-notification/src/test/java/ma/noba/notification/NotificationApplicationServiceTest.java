@@ -2,6 +2,7 @@ package ma.noba.notification;
 
 import ma.noba.notification.application.service.NotificationApplicationService;
 import ma.noba.notification.domain.model.Notification;
+import ma.noba.notification.domain.model.NotificationCategory;
 import ma.noba.notification.domain.model.NotificationChannel;
 import ma.noba.notification.domain.model.NotificationDelivery;
 import ma.noba.notification.domain.model.NotificationStatus;
@@ -9,6 +10,7 @@ import ma.noba.notification.domain.port.NotificationDeliveryRepository;
 import ma.noba.notification.domain.port.NotificationEventRepository;
 import ma.noba.notification.domain.port.NotificationPort;
 import ma.noba.notification.domain.port.NotificationPreferencePort;
+import ma.noba.notification.domain.port.NotificationPreferencePort.QuietHours;
 import ma.noba.notification.domain.port.NotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,6 +20,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -55,15 +60,20 @@ class NotificationApplicationServiceTest {
     }
 
     private NotificationPort.Command command(Set<NotificationPort.Channel> channels) {
+        return command(NotificationPort.Category.TRANSACTIONAL, channels);
+    }
+
+    private NotificationPort.Command command(NotificationPort.Category category,
+                                             Set<NotificationPort.Channel> channels) {
         return new NotificationPort.Command(
-                userId, "test.event", NotificationPort.Category.TRANSACTIONAL, 1,
+                userId, "test.event", category, 1,
                 "Title", "Body", Map.of("k", "v"), "dedupe-key", "en", channels, null, null);
     }
 
     @Test
     @DisplayName("Creates the inbox item and queues enabled external channels")
     void createsInboxAndQueuesPush() {
-        when(preferences.isEnabled(userId, NotificationChannel.PUSH)).thenReturn(true);
+        when(preferences.isEnabled(userId, NotificationCategory.TRANSACTIONAL, NotificationChannel.PUSH)).thenReturn(true);
 
         UUID id = service.send(command(Set.of(NotificationPort.Channel.PUSH)));
 
@@ -77,6 +87,24 @@ class NotificationApplicationServiceTest {
         ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
         verify(notifications, times(2)).saveNotification(notificationCaptor.capture());
         assertThat(notificationCaptor.getValue().getStatus()).isEqualTo(NotificationStatus.QUEUED);
+    }
+
+    @Test
+    @DisplayName("Marketing notifications are deferred until quiet hours end")
+    void marketingIsDeferredDuringQuietHours() {
+        LocalTime now = LocalTime.now(ZoneId.of("UTC"));
+        when(preferences.isEnabled(userId, NotificationCategory.MARKETING, NotificationChannel.PUSH)).thenReturn(true);
+        when(preferences.quietHours(userId)).thenReturn(Optional.of(
+                new QuietHours(now.minusHours(1), now.plusHours(1), "UTC")));
+
+        service.send(command(NotificationPort.Category.MARKETING, Set.of(NotificationPort.Channel.PUSH)));
+
+        ArgumentCaptor<NotificationDelivery> captor = ArgumentCaptor.forClass(NotificationDelivery.class);
+        verify(deliveries, times(2)).saveDelivery(captor.capture());
+        NotificationDelivery push = captor.getAllValues().stream()
+                .filter(d -> d.getChannel() == NotificationChannel.PUSH)
+                .findFirst().orElseThrow();
+        assertThat(push.getNextAttemptAt()).isAfter(Instant.now());
     }
 
     @Test
@@ -96,7 +124,7 @@ class NotificationApplicationServiceTest {
     @Test
     @DisplayName("A disabled channel is recorded as suppressed, not queued")
     void disabledChannelIsSuppressed() {
-        when(preferences.isEnabled(userId, NotificationChannel.PUSH)).thenReturn(false);
+        when(preferences.isEnabled(userId, NotificationCategory.TRANSACTIONAL, NotificationChannel.PUSH)).thenReturn(false);
 
         service.send(command(Set.of(NotificationPort.Channel.PUSH)));
 
