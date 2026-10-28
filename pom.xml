@@ -27,6 +27,7 @@
         <module>modules/noba-loyalty</module>
         <module>modules/noba-media</module>
         <module>modules/noba-packagegift</module>
+        <module>modules/noba-notification</module>
         <module>modules/noba-payment</module>
         <module>modules/noba-promotion</module>
         <module>modules/noba-provider</module>
