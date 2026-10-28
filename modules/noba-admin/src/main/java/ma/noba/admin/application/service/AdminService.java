@@ -6,11 +6,13 @@ import ma.noba.admin.application.dto.AdminTransactionView;
 import ma.noba.admin.application.dto.AdminQueueDetailView;
 import ma.noba.admin.application.dto.AdminQueueView;
 import ma.noba.admin.application.dto.AdminStatsResponse;
+import ma.noba.admin.application.dto.AdminUserDetailView;
 import ma.noba.shared.application.dto.PagedResponse;
 import ma.noba.shared.domain.model.UserStatus;
 import ma.noba.shared.domain.port.AdminIdentityPort;
 import ma.noba.shared.domain.port.AdminPaymentPort;
 import ma.noba.shared.domain.port.AdminQueuePort;
+import ma.noba.shared.domain.port.AdminRolePort;
 import ma.noba.shared.domain.port.AdminUserDirectoryPort;
 import ma.noba.shared.domain.port.AdminProviderPort;
 import ma.noba.shared.domain.port.AdminUserPort;
@@ -33,11 +35,12 @@ public class AdminService {
     private final AdminUserDirectoryPort adminUserDirectoryPort;
     private final AdminAuditService auditService;
     private final AdminPaymentPort adminPaymentPort;
+    private final AdminRolePort adminRolePort;
 
     public AdminService(AdminIdentityPort adminIdentityPort, AdminQueuePort adminQueuePort,
                         AdminUserPort adminUserPort, AdminProviderPort adminProviderPort,
                         AdminUserDirectoryPort adminUserDirectoryPort, AdminAuditService auditService,
-                        AdminPaymentPort adminPaymentPort) {
+                        AdminPaymentPort adminPaymentPort, AdminRolePort adminRolePort) {
         this.adminIdentityPort = adminIdentityPort;
         this.adminQueuePort = adminQueuePort;
         this.adminUserPort = adminUserPort;
@@ -45,6 +48,7 @@ public class AdminService {
         this.adminUserDirectoryPort = adminUserDirectoryPort;
         this.auditService = auditService;
         this.adminPaymentPort = adminPaymentPort;
+        this.adminRolePort = adminRolePort;
     }
 
     @Transactional(readOnly = true)
@@ -94,11 +98,14 @@ public class AdminService {
     }
 
     @Transactional
-    public void suspendUser(UUID actorId, String actorLabel, UUID userId) {
+    public void suspendUser(UUID actorId, String actorLabel, UUID userId, String reason) {
         String previous = adminIdentityPort.findUser(userId).map(AdminIdentityPort.UserState::status).orElse(null);
         adminIdentityPort.suspendUser(userId);
-        auditService.record(actorId, resolveActor(actorId, actorLabel), "USER_SUSPENDED", "USER", userId,
-                statusChange(previous, "DISABLED"));
+        Map<String, Object> metadata = statusChange(previous, "DISABLED");
+        if (reason != null && !reason.isBlank()) {
+            metadata.put("reason", reason.trim());
+        }
+        auditService.record(actorId, resolveActor(actorId, actorLabel), "USER_SUSPENDED", "USER", userId, metadata);
     }
 
     @Transactional
@@ -228,6 +235,110 @@ public class AdminService {
         Map<String, Object> metadata = statusChange(before.status(), newStatus);
         metadata.put("providerId", before.providerId().toString());
         auditService.record(actorId, resolveActor(actorId, actorLabel), action, "QUEUE", queueId, metadata);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminUserDetailView userDetail(UUID userId) {
+        AdminIdentityPort.UserState user = adminIdentityPort.findUser(userId)
+                .orElseThrow(() -> new NoSuchElementException("User not found"));
+        String name = adminUserDirectoryPort.displayNames(List.of(userId))
+                .getOrDefault(userId, user.email() != null ? user.email() : "User");
+        return new AdminUserDetailView(
+                user.id(), name, user.email(), user.phone(), user.status(),
+                adminRolePort.rolesOf(userId), user.createdAt());
+    }
+
+    /**
+     * Replaces a user's roles. Guards: an admin cannot edit their own roles (no self-lockout), and
+     * the last remaining administrator cannot be demoted.
+     */
+    @Transactional
+    public AdminUserDetailView updateRoles(UUID actorId, String actorLabel, UUID userId, java.util.Set<String> roles) {
+        if (actorId.equals(userId)) {
+            throw new IllegalArgumentException("You cannot change your own roles");
+        }
+        AdminIdentityPort.UserState user = adminIdentityPort.findUser(userId)
+                .orElseThrow(() -> new NoSuchElementException("User not found"));
+        java.util.Set<String> before = adminRolePort.rolesOf(userId);
+        java.util.Set<String> next = new java.util.LinkedHashSet<>();
+        if (roles != null) {
+            roles.stream()
+                    .filter(java.util.Objects::nonNull)
+                    .map(value -> value.trim().toUpperCase(java.util.Locale.ROOT))
+                    .filter(adminRolePort.assignableRoles()::contains)
+                    .forEach(next::add);
+        }
+        // Every account keeps the base role.
+        next.add("USER");
+        if (before.contains("ADMIN") && !next.contains("ADMIN") && adminRolePort.countAdmins() <= 1) {
+            throw new IllegalArgumentException("The last administrator cannot be demoted");
+        }
+        adminRolePort.replaceRoles(userId, next);
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("before", before);
+        metadata.put("after", next);
+        metadata.put("name", user.email());
+        auditService.record(actorId, resolveActor(actorId, actorLabel), "USER_ROLES_CHANGED",
+                "USER", userId, metadata);
+        return userDetail(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public String exportUsers(String query, String status, String role) {
+        PagedResponse<AdminUserDirectoryPort.UserRow> rows = adminUserDirectoryPort.searchUsers(
+                query == null ? "" : query,
+                status == null || status.isBlank() ? null : ma.noba.shared.domain.model.UserStatus.valueOf(status.toUpperCase()),
+                role == null ? "" : role,
+                0, 5000);
+        StringBuilder csv = new StringBuilder("id,first_name,last_name,email,phone,status,roles,created_at\n");
+        for (AdminUserDirectoryPort.UserRow row : rows.content()) {
+            csv.append(csvRow(row.id(), row.firstName(), row.lastName(), row.email(), row.phone(),
+                    row.status(), String.join("|", row.roles()), row.createdAt())).append('\n');
+        }
+        return csv.toString();
+    }
+
+    @Transactional(readOnly = true)
+    public String exportTransactions(String status) {
+        PagedResponse<AdminPaymentPort.TransactionRow> rows =
+                adminPaymentPort.searchTransactions(status == null ? "" : status, 0, 5000);
+        StringBuilder csv = new StringBuilder(
+                "id,user_id,provider_id,amount,fee,net,currency,status,payment_intent,created_at,completed_at\n");
+        for (AdminPaymentPort.TransactionRow row : rows.content()) {
+            csv.append(csvRow(row.id(), row.userId(), row.providerId(), row.amount(), row.fee(),
+                    row.netAmount(), row.currency(), row.status(), row.paymentIntentId(),
+                    row.createdAt(), row.completedAt())).append('\n');
+        }
+        return csv.toString();
+    }
+
+    @Transactional(readOnly = true)
+    public String exportPayouts(String status) {
+        PagedResponse<AdminPaymentPort.PayoutRow> rows =
+                adminPaymentPort.searchPayouts(status == null ? "" : status, 0, 5000);
+        StringBuilder csv = new StringBuilder("id,provider_id,amount,currency,status,transfer_id,created_at,paid_at\n");
+        for (AdminPaymentPort.PayoutRow row : rows.content()) {
+            csv.append(csvRow(row.id(), row.providerId(), row.amount(), row.currency(), row.status(),
+                    row.transferId(), row.createdAt(), row.paidAt())).append('\n');
+        }
+        return csv.toString();
+    }
+
+    private static String csvRow(Object... values) {
+        StringBuilder row = new StringBuilder();
+        for (int i = 0; i < values.length; i++) {
+            if (i > 0) row.append(',');
+            Object value = values[i];
+            if (value == null) continue;
+            String text = String.valueOf(value);
+            boolean quote = text.contains(",") || text.contains("\"") || text.contains("\n");
+            if (quote) {
+                row.append('"').append(text.replace("\"", "\"\"")).append('"');
+            } else {
+                row.append(text);
+            }
+        }
+        return row.toString();
     }
 
     @Transactional(readOnly = true)

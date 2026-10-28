@@ -14,4 +14,6 @@ public interface UserRoleRepository {
     List<UserRole> findByRoleName(String roleName);
 
     long countByRoleName(String roleName);
+
+    void remove(UserRole userRole);
 }

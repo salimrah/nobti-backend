@@ -1,9 +1,13 @@
-# Development — Local Machine
-# Use when: Running locally for development
+# Development — Local Machine (broker-less)
+# Use when: Running locally for development.
 #
+# Modules talk through the in-process event bus; no message broker is required.
 # Start:  docker compose -f docker-compose.dev.yml up -d
 # Stop:   docker compose -f docker-compose.dev.yml down
-# Logs:   docker compose -f docker-compose.dev.yml logs -f noba-backend
+#
+# Need to exercise the RabbitMQ transport? Add the optional broker:
+#   docker compose -f docker-compose.dev.yml -f docker-compose.broker.yml --profile broker up -d
+#   EVENT_BUS_RABBITMQ_ENABLED=true ...
 
 services:
   postgres:
@@ -31,23 +35,6 @@ services:
     volumes:
       - redisdata-dev:/data
 
-  rabbitmq:
-    image: rabbitmq:4-management-alpine
-    container_name: noba-rabbitmq-dev
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    volumes:
-      - rabbitmqdata-dev:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # Optional: Run app in container for dev testing
   # Usually you run `./mvnw spring-boot:run` directly on your machine instead
   # Uncomment below if you want to run the app in Docker for dev
@@ -71,6 +58,4 @@ volumes:
   pgdata-dev:
     driver: local
   redisdata-dev:
-    driver: local
-  rabbitmqdata-dev:
     driver: local

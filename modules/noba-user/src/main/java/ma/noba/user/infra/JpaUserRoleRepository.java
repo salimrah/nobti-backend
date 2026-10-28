@@ -18,4 +18,9 @@ public interface JpaUserRoleRepository extends JpaRepository<UserRole, UUID>, Us
 
     @Query("SELECT ur FROM UserRole ur WHERE ur.role.name = :roleName")
     List<UserRole> findByRoleName(@Param("roleName") String roleName);
+
+    @Override
+    default void remove(UserRole userRole) {
+        delete(userRole);
+    }
 }

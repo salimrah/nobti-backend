@@ -39,7 +39,12 @@ public class AdminIdentityPortAdapter implements AdminIdentityPort {
     @Override
     public Optional<UserState> findUser(UUID userId) {
         return userRepository.findById(userId)
-                .map(user -> new UserState(user.getId(), user.getStatus() != null ? user.getStatus().name() : null));
+                .map(user -> new UserState(
+                        user.getId(),
+                        user.getStatus() != null ? user.getStatus().name() : null,
+                        user.getEmail(),
+                        user.getPhone(),
+                        user.getCreatedAt()));
     }
 
     @Override

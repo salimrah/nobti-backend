@@ -1,5 +1,6 @@
 package ma.noba.shared.domain.port;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -12,6 +13,6 @@ public interface AdminIdentityPort {
 
     Optional<UserState> findUser(UUID userId);
 
-    record UserState(UUID id, String status) {
+    record UserState(UUID id, String status, String email, String phone, Instant createdAt) {
     }
 }
