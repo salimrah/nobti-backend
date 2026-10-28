@@ -18,7 +18,7 @@ public class TwilioWhatsAppProvider implements WhatsAppGateway {
 
     private static final Logger log = LoggerFactory.getLogger(TwilioWhatsAppProvider.class);
 
-    @Value("${providers.twilio.whatsappFrom}") String whatsappFrom;
+    @Value("${otp.providers.whatsapp.from:}") String whatsappFrom;
 
     @Override
     @CircuitBreaker(name = ResilienceConfig.EXTERNAL_SERVICE, fallbackMethod = "sendFallback")
