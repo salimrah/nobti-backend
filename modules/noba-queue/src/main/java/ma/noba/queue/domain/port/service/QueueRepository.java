@@ -2,6 +2,8 @@ package ma.noba.queue.domain.port.service;
 
 import ma.noba.queue.domain.model.Queue;
 import ma.noba.queue.domain.model.QueueStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,4 +24,8 @@ public interface QueueRepository {
     long countByStatusIn(List<QueueStatus> statuses);
 
     long countAllMembers();
+
+    Page<Queue> findByStatusOrderByUpdatedAtDesc(QueueStatus status, Pageable pageable);
+
+    Page<Queue> findAllByOrderByUpdatedAtDesc(Pageable pageable);
 }

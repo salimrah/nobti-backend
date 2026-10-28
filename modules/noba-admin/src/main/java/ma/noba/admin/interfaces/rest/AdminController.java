@@ -1,11 +1,17 @@
 package ma.noba.admin.interfaces.rest;
 
+import ma.noba.admin.application.dto.AdminAuditResponse;
+import ma.noba.admin.application.dto.AdminQueueDetailView;
+import ma.noba.admin.application.dto.AdminQueueView;
 import ma.noba.admin.application.dto.AdminStatsResponse;
-import ma.noba.shared.application.dto.PagedResponse;
 import ma.noba.admin.application.service.AdminService;
+import ma.noba.shared.application.dto.PagedResponse;
 import ma.noba.shared.domain.port.AdminProviderPort;
+import ma.noba.shared.domain.port.AdminUserDirectoryPort;
+import ma.noba.shared.domain.user.UserPrincipal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,7 +24,6 @@ public class AdminController {
 
     private final AdminService adminService;
 
-
     public AdminController(AdminService adminService) {
         this.adminService = adminService;
     }
@@ -28,20 +33,8 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getStats());
     }
 
-    @PutMapping("/users/{userId}/suspend")
-    public ResponseEntity<Void> suspendUser(@PathVariable UUID userId) {
-        adminService.suspendUser(userId);
-        return ResponseEntity.ok().build();
-    }
-
-    @PutMapping("/users/{userId}/activate")
-    public ResponseEntity<Void> activateUser(@PathVariable UUID userId) {
-        adminService.activateUser(userId);
-        return ResponseEntity.ok().build();
-    }
-
     @GetMapping("/users")
-    public ResponseEntity<PagedResponse<ma.noba.shared.domain.port.AdminUserDirectoryPort.UserRow>> searchUsers(
+    public ResponseEntity<PagedResponse<AdminUserDirectoryPort.UserRow>> searchUsers(
             @RequestParam(required = false) String query,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String role,
@@ -50,8 +43,22 @@ public class AdminController {
         return ResponseEntity.ok(adminService.searchUsers(query, status, role, page, size));
     }
 
+    @PutMapping("/users/{userId}/suspend")
+    public ResponseEntity<Void> suspendUser(@AuthenticationPrincipal UserPrincipal principal,
+                                            @PathVariable UUID userId) {
+        adminService.suspendUser(principal.id(), principal.email(), userId);
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/users/{userId}/activate")
+    public ResponseEntity<Void> activateUser(@AuthenticationPrincipal UserPrincipal principal,
+                                             @PathVariable UUID userId) {
+        adminService.activateUser(principal.id(), principal.email(), userId);
+        return ResponseEntity.ok().build();
+    }
+
     @GetMapping("/providers")
-    public ResponseEntity<PagedResponse<ma.noba.shared.domain.port.AdminProviderPort.ProviderRow>> searchProviders(
+    public ResponseEntity<PagedResponse<AdminProviderPort.ProviderRow>> searchProviders(
             @RequestParam(required = false) String query,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
@@ -65,14 +72,66 @@ public class AdminController {
     }
 
     @PutMapping("/providers/{providerId}/approve")
-    public ResponseEntity<Void> approveProvider(@PathVariable UUID providerId) {
-        adminService.approveProvider(providerId);
+    public ResponseEntity<Void> approveProvider(@AuthenticationPrincipal UserPrincipal principal,
+                                                @PathVariable UUID providerId) {
+        adminService.approveProvider(principal.id(), principal.email(), providerId);
         return ResponseEntity.ok().build();
     }
 
     @PutMapping("/providers/{providerId}/reject")
-    public ResponseEntity<Void> rejectProvider(@PathVariable UUID providerId) {
-        adminService.rejectProvider(providerId);
+    public ResponseEntity<Void> rejectProvider(@AuthenticationPrincipal UserPrincipal principal,
+                                               @PathVariable UUID providerId) {
+        adminService.rejectProvider(principal.id(), principal.email(), providerId);
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/queues")
+    public ResponseEntity<PagedResponse<AdminQueueView>> searchQueues(
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(adminService.searchQueues(status, page, size));
+    }
+
+    @GetMapping("/queues/{queueId}")
+    public ResponseEntity<AdminQueueDetailView> queueDetail(@PathVariable UUID queueId) {
+        return ResponseEntity.ok(adminService.queueDetail(queueId));
+    }
+
+    @PutMapping("/queues/{queueId}/pause")
+    public ResponseEntity<Void> pauseQueue(@AuthenticationPrincipal UserPrincipal principal,
+                                           @PathVariable UUID queueId) {
+        adminService.pauseQueue(principal.id(), principal.email(), queueId);
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/queues/{queueId}/resume")
+    public ResponseEntity<Void> resumeQueue(@AuthenticationPrincipal UserPrincipal principal,
+                                            @PathVariable UUID queueId) {
+        adminService.resumeQueue(principal.id(), principal.email(), queueId);
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/queues/{queueId}/close")
+    public ResponseEntity<Void> closeQueue(@AuthenticationPrincipal UserPrincipal principal,
+                                           @PathVariable UUID queueId) {
+        adminService.closeQueue(principal.id(), principal.email(), queueId);
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/queues/{queueId}/next")
+    public ResponseEntity<Void> advanceQueue(@AuthenticationPrincipal UserPrincipal principal,
+                                             @PathVariable UUID queueId) {
+        adminService.advanceQueue(principal.id(), principal.email(), queueId);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/audit")
+    public ResponseEntity<PagedResponse<AdminAuditResponse>> audit(
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) String targetType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(adminService.audit(action, targetType, page, size));
     }
 }

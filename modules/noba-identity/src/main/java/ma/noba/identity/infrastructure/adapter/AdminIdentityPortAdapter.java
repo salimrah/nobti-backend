@@ -7,6 +7,7 @@ import ma.noba.shared.domain.model.UserStatus;
 import ma.noba.shared.domain.port.AdminIdentityPort;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -33,6 +34,12 @@ public class AdminIdentityPortAdapter implements AdminIdentityPort {
     @Override
     public long countSuspendedUsers() {
         return userRepository.countByStatus(UserStatus.DISABLED);
+    }
+
+    @Override
+    public Optional<UserState> findUser(UUID userId) {
+        return userRepository.findById(userId)
+                .map(user -> new UserState(user.getId(), user.getStatus() != null ? user.getStatus().name() : null));
     }
 
     @Override

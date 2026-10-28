@@ -11,6 +11,9 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -95,6 +98,31 @@ public class JdbcAdminUserDirectoryAdapter implements AdminUserDirectoryPort {
 
         Long total = jdbc.queryForObject("select count(distinct u.id) " + FROM + FILTERS, params, Long.class);
         return PagedResponse.of(rows, page, size, total == null ? 0 : total);
+    }
+
+    @Override
+    public Map<UUID, String> displayNames(Collection<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                """
+                select u.id, p.first_name, p.last_name, p.display_name
+                from users u
+                left join user_profile p on p.user_id = u.id
+                where u.id in (:ids)
+                """,
+                new MapSqlParameterSource("ids", userIds));
+        Map<UUID, String> names = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            UUID id = (UUID) row.get("id");
+            String first = (String) row.get("first_name");
+            String last = (String) row.get("last_name");
+            String display = (String) row.get("display_name");
+            String name = ((first == null ? "" : first) + " " + (last == null ? "" : last)).trim();
+            names.put(id, name.isBlank() ? (display == null || display.isBlank() ? "Client" : display) : name);
+        }
+        return names;
     }
 
     private static Set<String> parseRoles(String roles) {
