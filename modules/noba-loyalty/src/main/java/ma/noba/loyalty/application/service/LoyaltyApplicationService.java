@@ -12,6 +12,7 @@ import ma.noba.loyalty.domain.port.LoyaltyRewardRepository;
 import ma.noba.loyalty.domain.port.LoyaltyPointsTransactionRepository;
 import ma.noba.payment.domain.port.ProviderLookupPort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -90,7 +91,11 @@ public class LoyaltyApplicationService {
         );
     }
 
-    @Transactional
+    /**
+     * Runs in its own transaction: the award is triggered from an {@code AFTER_COMMIT} listener
+     * where the caller's transaction is already finished, so joining it would silently fail.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void awardPoints(UUID userId, UUID providerId, int points, String reason, UUID referenceId) {
         if (points <= 0) {
             return;
