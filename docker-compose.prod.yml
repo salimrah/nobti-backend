@@ -145,9 +145,12 @@ services:
       context: .
       dockerfile: Dockerfile.migrate
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/noba
-      SPRING_DATASOURCE_USERNAME: ${DB_USER:?DB_USER must be set}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      # The migration image is Flyway, not Spring: it reads FLYWAY_*.
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/noba
+      FLYWAY_USER: ${DB_USER:?DB_USER must be set}
+      FLYWAY_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      FLYWAY_BASELINE_ON_MIGRATE: "true"
+      FLYWAY_CONNECT_RETRIES: "10"
     depends_on:
       postgres:
         condition: service_healthy
