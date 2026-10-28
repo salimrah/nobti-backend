@@ -1,12 +1,15 @@
 package ma.noba.admin.application.service;
 
 import ma.noba.admin.application.dto.AdminAuditResponse;
+import ma.noba.admin.application.dto.AdminPayoutView;
+import ma.noba.admin.application.dto.AdminTransactionView;
 import ma.noba.admin.application.dto.AdminQueueDetailView;
 import ma.noba.admin.application.dto.AdminQueueView;
 import ma.noba.admin.application.dto.AdminStatsResponse;
 import ma.noba.shared.application.dto.PagedResponse;
 import ma.noba.shared.domain.model.UserStatus;
 import ma.noba.shared.domain.port.AdminIdentityPort;
+import ma.noba.shared.domain.port.AdminPaymentPort;
 import ma.noba.shared.domain.port.AdminQueuePort;
 import ma.noba.shared.domain.port.AdminUserDirectoryPort;
 import ma.noba.shared.domain.port.AdminProviderPort;
@@ -29,16 +32,19 @@ public class AdminService {
     private final AdminProviderPort adminProviderPort;
     private final AdminUserDirectoryPort adminUserDirectoryPort;
     private final AdminAuditService auditService;
+    private final AdminPaymentPort adminPaymentPort;
 
     public AdminService(AdminIdentityPort adminIdentityPort, AdminQueuePort adminQueuePort,
                         AdminUserPort adminUserPort, AdminProviderPort adminProviderPort,
-                        AdminUserDirectoryPort adminUserDirectoryPort, AdminAuditService auditService) {
+                        AdminUserDirectoryPort adminUserDirectoryPort, AdminAuditService auditService,
+                        AdminPaymentPort adminPaymentPort) {
         this.adminIdentityPort = adminIdentityPort;
         this.adminQueuePort = adminQueuePort;
         this.adminUserPort = adminUserPort;
         this.adminProviderPort = adminProviderPort;
         this.adminUserDirectoryPort = adminUserDirectoryPort;
         this.auditService = auditService;
+        this.adminPaymentPort = adminPaymentPort;
     }
 
     @Transactional(readOnly = true)
@@ -222,6 +228,52 @@ public class AdminService {
         Map<String, Object> metadata = statusChange(before.status(), newStatus);
         metadata.put("providerId", before.providerId().toString());
         auditService.record(actorId, resolveActor(actorId, actorLabel), action, "QUEUE", queueId, metadata);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<AdminTransactionView> searchTransactions(String status, int page, int size) {
+        PagedResponse<AdminPaymentPort.TransactionRow> rows =
+                adminPaymentPort.searchTransactions(status, page, size);
+        Map<UUID, String> providerNames = adminProviderPort.names(
+                rows.content().stream().map(AdminPaymentPort.TransactionRow::providerId).distinct().toList());
+        Map<UUID, String> clientNames = adminUserDirectoryPort.displayNames(
+                rows.content().stream().map(AdminPaymentPort.TransactionRow::userId).distinct().toList());
+        return PagedResponse.of(
+                rows.content().stream().map(row -> new AdminTransactionView(
+                        row.id(), row.userId(), clientNames.getOrDefault(row.userId(), "Client"),
+                        row.providerId(), providerNames.getOrDefault(row.providerId(), "Provider"),
+                        row.amount(), row.fee(), row.netAmount(), row.currency(), row.status(),
+                        row.paymentIntentId(), row.failureMessage(), row.createdAt(), row.completedAt()))
+                        .toList(),
+                rows.page(), rows.size(), rows.totalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<AdminPayoutView> searchPayouts(String status, int page, int size) {
+        PagedResponse<AdminPaymentPort.PayoutRow> rows = adminPaymentPort.searchPayouts(status, page, size);
+        Map<UUID, String> providerNames = adminProviderPort.names(
+                rows.content().stream().map(AdminPaymentPort.PayoutRow::providerId).distinct().toList());
+        return PagedResponse.of(
+                rows.content().stream().map(row -> new AdminPayoutView(
+                        row.id(), row.providerId(), providerNames.getOrDefault(row.providerId(), "Provider"),
+                        row.amount(), row.currency(), row.status(), row.transferId(),
+                        row.createdAt(), row.paidAt()))
+                        .toList(),
+                rows.page(), rows.size(), rows.totalElements());
+    }
+
+    @Transactional
+    public void refundTransaction(UUID actorId, String actorLabel, UUID transactionId) {
+        AdminPaymentPort.TransactionRow before = adminPaymentPort.findTransaction(transactionId)
+                .orElseThrow(() -> new NoSuchElementException("Transaction not found"));
+        adminPaymentPort.refund(transactionId);
+        AdminPaymentPort.TransactionRow after = adminPaymentPort.findTransaction(transactionId).orElse(before);
+        Map<String, Object> metadata = statusChange(before.status(), after.status());
+        metadata.put("amount", before.amount());
+        metadata.put("currency", before.currency());
+        metadata.put("providerId", before.providerId().toString());
+        auditService.record(actorId, resolveActor(actorId, actorLabel), "PAYMENT_REFUNDED",
+                "PAYMENT", transactionId, metadata);
     }
 
     @Transactional(readOnly = true)

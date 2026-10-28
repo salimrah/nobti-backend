@@ -1,6 +1,9 @@
 package ma.noba.notification.domain.port;
 
+import ma.noba.notification.domain.model.DeliveryStatus;
+import ma.noba.notification.domain.model.NotificationChannel;
 import ma.noba.notification.domain.model.NotificationDelivery;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
@@ -18,4 +21,10 @@ public interface NotificationDeliveryRepository {
     java.util.Optional<NotificationDelivery> findById(UUID id);
 
     java.util.Optional<NotificationDelivery> findByProviderMessageId(String providerMessageId);
+
+    Page<DeliveryWithType> searchWithType(DeliveryStatus status, NotificationChannel channel,
+                                          Pageable pageable);
+
+    record DeliveryWithType(NotificationDelivery delivery, String notificationType) {
+    }
 }

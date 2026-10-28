@@ -1,6 +1,8 @@
 package ma.noba.admin.interfaces.rest;
 
 import ma.noba.admin.application.dto.AdminAuditResponse;
+import ma.noba.admin.application.dto.AdminPayoutView;
+import ma.noba.admin.application.dto.AdminTransactionView;
 import ma.noba.admin.application.dto.AdminQueueDetailView;
 import ma.noba.admin.application.dto.AdminQueueView;
 import ma.noba.admin.application.dto.AdminStatsResponse;
@@ -124,6 +126,29 @@ public class AdminController {
                                              @PathVariable UUID queueId) {
         adminService.advanceQueue(principal.id(), principal.email(), queueId);
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/payments/transactions")
+    public ResponseEntity<PagedResponse<AdminTransactionView>> searchTransactions(
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(adminService.searchTransactions(status, page, size));
+    }
+
+    @PostMapping("/payments/transactions/{transactionId}/refund")
+    public ResponseEntity<Void> refundTransaction(@AuthenticationPrincipal UserPrincipal principal,
+                                                  @PathVariable UUID transactionId) {
+        adminService.refundTransaction(principal.id(), principal.email(), transactionId);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/payments/payouts")
+    public ResponseEntity<PagedResponse<AdminPayoutView>> searchPayouts(
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(adminService.searchPayouts(status, page, size));
     }
 
     @GetMapping("/audit")

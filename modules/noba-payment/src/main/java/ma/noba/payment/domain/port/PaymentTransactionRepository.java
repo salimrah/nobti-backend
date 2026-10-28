@@ -26,5 +26,10 @@ public interface PaymentTransactionRepository {
     Page<PaymentTransaction> findByUserId(UUID userId, Pageable pageable);
     List<PaymentTransaction> findByUserIdOrderByCreatedAtDesc(UUID userId);
     Page<PaymentTransaction> findByProviderId(UUID providerId, Pageable pageable);
+
+    Page<PaymentTransaction> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    Page<PaymentTransaction> findByStatusOrderByCreatedAtDesc(ma.noba.payment.domain.model.PaymentStatus status,
+                                                              Pageable pageable);
     List<PaymentTransaction> findByProviderIdAndStatus(UUID providerId, PaymentStatus status);
 }
