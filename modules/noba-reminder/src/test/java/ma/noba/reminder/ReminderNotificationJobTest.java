@@ -1,15 +1,14 @@
 package ma.noba.reminder;
 
+import ma.noba.notification.domain.port.NotificationPort;
 import ma.noba.reminder.domain.model.ServiceReminder;
 import ma.noba.reminder.domain.port.ServiceReminderRepository;
 import ma.noba.reminder.infra.ReminderNotificationJob;
-import ma.noba.shared.domain.exception.PushDeliveryException;
-import ma.noba.shared.domain.port.FcmTokenQueryPort;
-import ma.noba.shared.domain.port.PushGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -19,11 +18,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.contains;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,14 +26,13 @@ import static org.mockito.Mockito.when;
 class ReminderNotificationJobTest {
 
     @Mock ServiceReminderRepository reminderRepository;
-    @Mock FcmTokenQueryPort fcmTokens;
-    @Mock PushGateway pushGateway;
+    @Mock NotificationPort notifications;
 
     private ReminderNotificationJob job;
 
     @BeforeEach
     void setUp() {
-        job = new ReminderNotificationJob(reminderRepository, fcmTokens, pushGateway);
+        job = new ReminderNotificationJob(reminderRepository, notifications);
     }
 
     private ServiceReminder reminder() {
@@ -51,44 +44,31 @@ class ReminderNotificationJobTest {
     }
 
     @Test
-    @DisplayName("A due reminder is sent through the push gateway and snoozed")
+    @DisplayName("A due reminder is recorded as a notification and snoozed")
     void sendsDueReminder() {
         ServiceReminder reminder = reminder();
         when(reminderRepository.findByActiveTrueAndNextReminderAtBefore(any())).thenReturn(List.of(reminder));
-        when(fcmTokens.findFcmTokenByUserId(reminder.getUserId())).thenReturn(Optional.of("token-12345678"));
 
         job.processDueReminders();
 
-        verify(pushGateway).send(eq("token-12345678"), eq("Service Reminder"),
-                contains("Coupe classique"), anyMap());
-        verify(reminderRepository, atLeastOnce()).save(reminder);
+        ArgumentCaptor<NotificationPort.Command> captor = ArgumentCaptor.forClass(NotificationPort.Command.class);
+        verify(notifications).send(captor.capture());
+        NotificationPort.Command command = captor.getValue();
+        assertThat(command.userId()).isEqualTo(reminder.getUserId());
+        assertThat(command.type()).isEqualTo("reminder.service");
+        assertThat(command.title()).isEqualTo("Service Reminder");
+        assertThat(command.body()).contains("Coupe classique");
+        assertThat(command.dedupeKey()).startsWith("reminder:" + reminder.getId());
+        verify(reminderRepository).save(reminder);
     }
 
     @Test
-    @DisplayName("A reminder without a device token is deactivated")
-    void missingTokenDeactivatesReminder() {
-        ServiceReminder reminder = reminder();
-        when(reminderRepository.findByActiveTrueAndNextReminderAtBefore(any())).thenReturn(List.of(reminder));
-        when(fcmTokens.findFcmTokenByUserId(reminder.getUserId())).thenReturn(Optional.empty());
+    @DisplayName("No due reminders means no notifications")
+    void noDueReminders() {
+        when(reminderRepository.findByActiveTrueAndNextReminderAtBefore(any())).thenReturn(List.of());
 
         job.processDueReminders();
 
-        verify(pushGateway, never()).send(any(), any(), any(), anyMap());
-        assertThat(reminder.isActive()).isFalse();
-        verify(reminderRepository, atLeastOnce()).save(reminder);
-    }
-
-    @Test
-    @DisplayName("An invalid token reported by the gateway is removed")
-    void invalidTokenIsRemoved() {
-        ServiceReminder reminder = reminder();
-        when(reminderRepository.findByActiveTrueAndNextReminderAtBefore(any())).thenReturn(List.of(reminder));
-        when(fcmTokens.findFcmTokenByUserId(reminder.getUserId())).thenReturn(Optional.of("token-12345678"));
-        doThrow(new PushDeliveryException(true, "UNREGISTERED", null))
-                .when(pushGateway).send(any(), any(), any(), anyMap());
-
-        job.processDueReminders();
-
-        verify(fcmTokens).invalidateToken("token-12345678");
+        verify(notifications, never()).send(any());
     }
 }

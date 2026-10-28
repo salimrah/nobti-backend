@@ -17,5 +17,10 @@
             <artifactId>noba-kernel</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>ma.noba</groupId>
+            <artifactId>noba-notification</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 </project>
