@@ -26,7 +26,7 @@ public class PaymentApplicationService {
     private final PaymentTransactionRepository transactionRepository;
     private final PayoutRepository payoutRepository;
     private final ProviderPayoutSettingsRepository payoutSettingsRepository;
-    private final StripePaymentPort stripePaymentPort;
+    private final PaymentGatewayPort paymentGateway;
     private final ProviderServicePricePort providerServicePricePort;
 
     @Transactional
@@ -59,7 +59,7 @@ public class PaymentApplicationService {
         );
         transaction = transactionRepository.save(transaction);
 
-        String clientSecret = stripePaymentPort.createPaymentIntent(
+        String clientSecret = paymentGateway.createPaymentIntent(
             transaction,
             null,
             request.getReturnUrl()
@@ -96,7 +96,7 @@ public class PaymentApplicationService {
             BigDecimal netAmount = transaction.getNetAmount();
             // Transfer from the charge id (not the PaymentIntent) and in the transaction's own
             // currency; record the returned transfer id so a later refund can reverse it.
-            String transferId = stripePaymentPort.transferToProvider(
+            String transferId = paymentGateway.transferToProvider(
                 transaction.getStripeChargeId(), settings.getStripeAccountId(), netAmount, transaction.getCurrency());
             transaction.markTransferred(transferId);
             transactionRepository.save(transaction);
@@ -156,7 +156,7 @@ public class PaymentApplicationService {
 
         String accountLink = null;
         if (!settings.isPayoutsEnabled()) {
-            accountLink = stripePaymentPort.createStripeAccountLink(
+            accountLink = paymentGateway.createAccountLink(
                 providerId,
                 "https://noba.ma/provider/payouts",
                 "https://noba.ma/provider/payouts"
@@ -178,7 +178,7 @@ public class PaymentApplicationService {
             .orElseThrow(() -> new IllegalArgumentException("Payout settings not found for provider: " + providerId));
 
         // Only enable payouts if Stripe confirms the connected account can receive them.
-        boolean verified = stripePaymentPort.accountPayoutsEnabled(stripeAccountId);
+        boolean verified = paymentGateway.accountPayoutsEnabled(stripeAccountId);
         settings.updateStripeAccount(stripeAccountId, verified);
         payoutSettingsRepository.save(settings);
     }
@@ -199,10 +199,10 @@ public class PaymentApplicationService {
         // Claw back the provider's net transfer first, so a refund cannot leave the platform having
         // both returned the customer's money and paid the provider out.
         if (transaction.getStripeTransferId() != null && transaction.getNetAmount() != null) {
-            stripePaymentPort.reverseProviderTransfer(transaction.getStripeTransferId(), transaction.getNetAmount());
+            paymentGateway.reverseProviderTransfer(transaction.getStripeTransferId(), transaction.getNetAmount());
         }
 
-        stripePaymentPort.processRefund(transaction.getStripePaymentIntentId(), transaction.getAmount());
+        paymentGateway.processRefund(transaction.getStripePaymentIntentId(), transaction.getAmount());
         transaction.markRefunded();
         transactionRepository.save(transaction);
     }
