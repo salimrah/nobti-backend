@@ -43,9 +43,23 @@ public interface JpaProviderRepository extends JpaRepository<Provider, UUID>, Pr
     @EntityGraph(attributePaths = {"services"})
     Page<Provider> findByDescriptionContainingIgnoreCaseAndStatus(String description, ProviderStatus status, Pageable pageable);
 
+    @Query("select p from Provider p where "
+            + "(:status is null or p.status = :status) and ("
+            + ":query = '' or lower(p.name) like lower(concat('%', :query, '%')) "
+            + "or lower(coalesce(p.category, '')) like lower(concat('%', :query, '%')) "
+            + "or lower(coalesce(p.address, '')) like lower(concat('%', :query, '%'))) "
+            + "order by p.createdAt desc")
+    Page<Provider> adminSearchByQuery(@Param("query") String query,
+                                      @Param("status") ProviderStatus status,
+                                      Pageable pageable);
+
     @Override
-    default Page<Provider> searchActive(String query, Pageable pageable) {
-        if (query == null || query.isBlank()) {
+    default Page<Provider> adminSearch(String query, ProviderStatus status, Pageable pageable) {
+        return adminSearchByQuery(query == null ? "" : query.trim(), status, pageable);
+    }
+
+    @Override
+    default Page<Provider> searchActive(String query, Pageable pageable) {        if (query == null || query.isBlank()) {
             return findByActiveOnlyPage(pageable);
         }
         String q = query.trim();
@@ -91,19 +105,19 @@ public interface JpaProviderRepository extends JpaRepository<Provider, UUID>, Pr
     Page<Provider> searchFullText(@Param("query") String query, Pageable pageable);
 
     @Query("SELECT p FROM Provider p WHERE p.status = :status ORDER BY p.createdAt DESC")
-    List<Provider> findByStatusString(@Param("status") String status);
+    List<Provider> findByStatusValue(@Param("status") ProviderStatus status);
 
     @Query("SELECT COUNT(p) FROM Provider p WHERE p.status = :status")
-    long countByStatusString(@Param("status") String status);
+    long countByStatusValue(@Param("status") ProviderStatus status);
 
     @Override
     default List<Provider> findByStatus(ProviderStatus status) {
-        return findByStatusString(status.name());
+        return findByStatusValue(status);
     }
 
     @Override
     default long countByStatus(ProviderStatus status) {
-        return countByStatusString(status.name());
+        return countByStatusValue(status);
     }
 
     default Optional<Provider> findFirstByUserId(UUID userId) {
