@@ -23,6 +23,8 @@ public interface JpaNotificationDeliveryRepository
 
     List<NotificationDelivery> findByNotificationId(UUID notificationId);
 
+    java.util.Optional<NotificationDelivery> findByProviderMessageId(String providerMessageId);
+
     @Query("select d from NotificationDelivery d " +
             "where d.status in :statuses and d.nextAttemptAt is not null and d.nextAttemptAt <= :now " +
             "order by d.nextAttemptAt asc")

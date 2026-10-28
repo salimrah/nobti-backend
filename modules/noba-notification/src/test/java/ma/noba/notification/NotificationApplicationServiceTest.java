@@ -1,12 +1,14 @@
 package ma.noba.notification;
 
 import ma.noba.notification.application.service.NotificationApplicationService;
+import ma.noba.notification.application.service.NotificationTemplateRenderer;
 import ma.noba.notification.domain.model.Notification;
 import ma.noba.notification.domain.model.NotificationCategory;
 import ma.noba.notification.domain.model.NotificationChannel;
 import ma.noba.notification.domain.model.NotificationDelivery;
 import ma.noba.notification.domain.model.NotificationStatus;
 import ma.noba.notification.domain.port.NotificationDeliveryRepository;
+import ma.noba.notification.domain.port.NotificationDigestEntryRepository;
 import ma.noba.notification.domain.port.NotificationEventRepository;
 import ma.noba.notification.domain.port.NotificationPort;
 import ma.noba.notification.domain.port.NotificationPreferencePort;
@@ -44,13 +46,19 @@ class NotificationApplicationServiceTest {
     @Mock NotificationDeliveryRepository deliveries;
     @Mock NotificationEventRepository events;
     @Mock NotificationPreferencePort preferences;
+    @Mock NotificationDigestEntryRepository digestEntries;
+    @Mock NotificationTemplateRenderer renderer;
 
     private NotificationApplicationService service;
     private final UUID userId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
-        service = new NotificationApplicationService(notifications, deliveries, events, preferences);
+        service = new NotificationApplicationService(
+                notifications, deliveries, events, preferences, renderer, digestEntries);
+        lenient().when(renderer.render(any(), any(), any(), any(), any())).thenAnswer(invocation ->
+                new NotificationTemplateRenderer.Rendered(
+                        invocation.getArgument(3), invocation.getArgument(4), null, null));
         lenient().when(notifications.saveNotification(any())).thenAnswer(invocation -> {
             Notification n = invocation.getArgument(0);
             if (n.getId() == null) n.setId(UUID.randomUUID());
@@ -135,6 +143,23 @@ class NotificationApplicationServiceTest {
                 .findFirst().orElseThrow();
         assertThat(push.getStatus().name()).isEqualTo("SUPPRESSED");
         assertThat(push.getErrorCode()).isEqualTo("PREFERENCE_DISABLED");
+    }
+
+    @Test
+    @DisplayName("Marketing notifications are held for the digest instead of being pushed")
+    void marketingHeldForDigest() {
+        when(preferences.digest(userId)).thenReturn(Optional.of(
+                new NotificationPreferencePort.Digest(
+                        ma.noba.notification.domain.model.DigestFrequency.DAILY, "Africa/Casablanca")));
+
+        service.send(command(NotificationPort.Category.MARKETING, Set.of(NotificationPort.Channel.PUSH)));
+
+        // Only the in-app delivery is created; the push waits for the digest.
+        verify(deliveries, times(1)).saveDelivery(any());
+        verify(digestEntries).saveEntry(any());
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notifications, times(2)).saveNotification(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(NotificationStatus.QUEUED);
     }
 
     @Test
