@@ -5,7 +5,7 @@ import com.stripe.model.*;
 import com.stripe.param.*;
 import lombok.extern.slf4j.Slf4j;
 import ma.noba.payment.domain.model.PaymentTransaction;
-import ma.noba.payment.domain.port.StripePaymentPort;
+import ma.noba.payment.domain.port.PaymentGatewayPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
@@ -18,8 +18,8 @@ import java.util.UUID;
 
 @Slf4j
 @Component
-@ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText('${app.stripe.secret-key:}')")
-public class StripePaymentAdapter implements StripePaymentPort {
+@ConditionalOnExpression("'${payment.gateway:stripe}' == 'stripe' && T(org.springframework.util.StringUtils).hasText('${app.stripe.secret-key:}')")
+public class StripePaymentAdapter implements PaymentGatewayPort {
 
     /**
      * Converts a major-unit amount to Stripe minor units, rounding to 2 decimals half-up and
@@ -60,23 +60,23 @@ public class StripePaymentAdapter implements StripePaymentPort {
     }
 
     @Override
-    public void processRefund(String stripePaymentIntentId, BigDecimal amount) {
+    public void processRefund(String gatewayPaymentIntentId, BigDecimal amount) {
         try {
             RefundCreateParams params = RefundCreateParams.builder()
-                .setPaymentIntent(stripePaymentIntentId)
+                .setPaymentIntent(gatewayPaymentIntentId)
                 .setAmount(toMinorUnits(amount))
                 .build();
 
             Refund.create(params);
-            log.info("Refund processed for PI: {}", stripePaymentIntentId);
+            log.info("Refund processed for PI: {}", gatewayPaymentIntentId);
         } catch (StripeException e) {
-            log.error("Failed to process refund for PI: {}", stripePaymentIntentId, e);
+            log.error("Failed to process refund for PI: {}", gatewayPaymentIntentId, e);
             throw new RuntimeException("Failed to process refund: " + e.getMessage(), e);
         }
     }
 
     @Override
-    public String createStripeAccountLink(UUID providerId, String returnUrl, String refreshUrl) {
+    public String createAccountLink(UUID providerId, String returnUrl, String refreshUrl) {
         try {
             AccountCreateParams accountParams = AccountCreateParams.builder()
                 .setType(AccountCreateParams.Type.EXPRESS)
@@ -103,18 +103,18 @@ public class StripePaymentAdapter implements StripePaymentPort {
     }
 
     @Override
-    public String transferToProvider(String sourceChargeId, String stripeAccountId, BigDecimal amount, String currency) {
+    public String transferToProvider(String sourceChargeId, String gatewayAccountId, BigDecimal amount, String currency) {
         try {
             long amountInMinorUnits = toMinorUnits(amount);
             if (amountInMinorUnits <= 0) {
-                log.warn("Skipping zero/negative transfer to account {}", stripeAccountId);
+                log.warn("Skipping zero/negative transfer to account {}", gatewayAccountId);
                 return null;
             }
 
             TransferCreateParams.Builder builder = TransferCreateParams.builder()
                 .setAmount(amountInMinorUnits)
                 .setCurrency(currency.toLowerCase(Locale.ROOT))
-                .setDestination(stripeAccountId);
+                .setDestination(gatewayAccountId);
 
             // A transfer's source must be a charge (not a PaymentIntent), and it must be in the
             // same currency as the charge.
@@ -124,39 +124,39 @@ public class StripePaymentAdapter implements StripePaymentPort {
 
             Transfer transfer = Transfer.create(builder.build());
             log.info("Transfer {} of {} {} to {} (charge {})",
-                transfer.getId(), amount, currency, stripeAccountId, sourceChargeId);
+                transfer.getId(), amount, currency, gatewayAccountId, sourceChargeId);
             return transfer.getId();
         } catch (StripeException e) {
-            log.error("Failed to transfer to provider account: {}", stripeAccountId, e);
+            log.error("Failed to transfer to provider account: {}", gatewayAccountId, e);
             throw new RuntimeException("Failed to transfer to provider: " + e.getMessage(), e);
         }
     }
 
     @Override
-    public boolean accountPayoutsEnabled(String stripeAccountId) {
+    public boolean accountPayoutsEnabled(String gatewayAccountId) {
         try {
-            Account account = Account.retrieve(stripeAccountId);
+            Account account = Account.retrieve(gatewayAccountId);
             return Boolean.TRUE.equals(account.getPayoutsEnabled());
         } catch (StripeException e) {
-            log.error("Failed to verify Stripe account: {}", stripeAccountId, e);
+            log.error("Failed to verify Stripe account: {}", gatewayAccountId, e);
             return false;
         }
     }
 
     @Override
-    public void reverseProviderTransfer(String stripeTransferId, BigDecimal amount) {
+    public void reverseProviderTransfer(String gatewayTransferId, BigDecimal amount) {
         try {
             long amountInMinorUnits = toMinorUnits(amount);
             if (amountInMinorUnits <= 0) {
-                log.warn("Skipping zero/negative transfer reversal for transfer {}", stripeTransferId);
+                log.warn("Skipping zero/negative transfer reversal for transfer {}", gatewayTransferId);
                 return;
             }
             Map<String, Object> params = new HashMap<>();
             params.put("amount", amountInMinorUnits);
-            TransferReversal reversal = Transfer.retrieve(stripeTransferId).getReversals().create(params);
-            log.info("Reversed transfer {} by {} (reversal {})", stripeTransferId, amount, reversal.getId());
+            TransferReversal reversal = Transfer.retrieve(gatewayTransferId).getReversals().create(params);
+            log.info("Reversed transfer {} by {} (reversal {})", gatewayTransferId, amount, reversal.getId());
         } catch (StripeException e) {
-            log.error("Failed to reverse transfer {}", stripeTransferId, e);
+            log.error("Failed to reverse transfer {}", gatewayTransferId, e);
             throw new RuntimeException("Failed to reverse transfer: " + e.getMessage(), e);
         }
     }

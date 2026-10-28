@@ -10,7 +10,7 @@ import ma.noba.payment.domain.port.PaymentTransactionRepository;
 import ma.noba.payment.domain.port.PayoutRepository;
 import ma.noba.payment.domain.port.ProviderPayoutSettingsRepository;
 import ma.noba.payment.domain.port.ProviderServicePricePort;
-import ma.noba.payment.domain.port.StripePaymentPort;
+import ma.noba.payment.domain.port.PaymentGatewayPort;
 import ma.noba.shared.domain.exception.NotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,7 +38,7 @@ class PaymentApplicationServiceTest {
     @Mock PaymentTransactionRepository transactionRepository;
     @Mock PayoutRepository payoutRepository;
     @Mock ProviderPayoutSettingsRepository payoutSettingsRepository;
-    @Mock StripePaymentPort stripePaymentPort;
+    @Mock PaymentGatewayPort paymentGateway;
     @Mock ProviderServicePricePort providerServicePricePort;
 
     private PaymentApplicationService service;
@@ -46,7 +46,7 @@ class PaymentApplicationServiceTest {
     @BeforeEach
     void setUp() {
         service = new PaymentApplicationService(transactionRepository, payoutRepository, payoutSettingsRepository,
-                stripePaymentPort, providerServicePricePort);
+                paymentGateway, providerServicePricePort);
     }
 
     private void stubCheckoutPersistence() {
@@ -55,7 +55,7 @@ class PaymentApplicationServiceTest {
             if (tx.getId() == null) tx.setId(UUID.randomUUID());
             return tx;
         });
-        when(stripePaymentPort.createPaymentIntent(any(), any(), any())).thenReturn("secret");
+        when(paymentGateway.createPaymentIntent(any(), any(), any())).thenReturn("secret");
     }
 
     private PaymentTransaction captureSavedTransaction() {
@@ -78,7 +78,7 @@ class PaymentApplicationServiceTest {
         service.handlePaymentSuccess("pi_1", "ch_1");
 
         verify(transactionRepository, never()).save(any());
-        verify(stripePaymentPort, never()).transferToProvider(anyString(), anyString(), any(), anyString());
+        verify(paymentGateway, never()).transferToProvider(anyString(), anyString(), any(), anyString());
     }
 
     @Test
@@ -93,7 +93,7 @@ class PaymentApplicationServiceTest {
 
         assertThat(tx.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
         verify(transactionRepository, never()).save(any());
-        verify(stripePaymentPort, never()).transferToProvider(anyString(), anyString(), any(), anyString());
+        verify(paymentGateway, never()).transferToProvider(anyString(), anyString(), any(), anyString());
     }
 
     @Test
@@ -105,7 +105,7 @@ class PaymentApplicationServiceTest {
         when(transactionRepository.findByStripePaymentIntentIdForUpdate("pi_1")).thenReturn(Optional.of(tx));
         when(payoutSettingsRepository.findByProviderId(tx.getProviderId())).thenReturn(Optional.of(settings));
         when(transactionRepository.save(any())).thenReturn(tx);
-        when(stripePaymentPort.transferToProvider("ch_1", "acct_1", new BigDecimal("95.00"), "USD"))
+        when(paymentGateway.transferToProvider("ch_1", "acct_1", new BigDecimal("95.00"), "USD"))
                 .thenReturn("tr_1");
 
         service.handlePaymentSuccess("pi_1", "ch_1");
@@ -114,7 +114,7 @@ class PaymentApplicationServiceTest {
         assertThat(tx.getFee()).isEqualByComparingTo("5.00");
         assertThat(tx.getNetAmount()).isEqualByComparingTo("95.00");
         // Transfer uses the charge id + transaction currency (not the PaymentIntent id / hardcoded usd).
-        verify(stripePaymentPort).transferToProvider("ch_1", "acct_1", new BigDecimal("95.00"), "USD");
+        verify(paymentGateway).transferToProvider("ch_1", "acct_1", new BigDecimal("95.00"), "USD");
         assertThat(tx.getStripeTransferId()).isEqualTo("tr_1");
 
         ArgumentCaptor<Payout> payoutCaptor = ArgumentCaptor.forClass(Payout.class);
@@ -146,8 +146,8 @@ class PaymentApplicationServiceTest {
 
         service.processRefund(id);
 
-        verify(stripePaymentPort, never()).reverseProviderTransfer(anyString(), any());
-        verify(stripePaymentPort).processRefund("pi_1", new BigDecimal("100.00"));
+        verify(paymentGateway, never()).reverseProviderTransfer(anyString(), any());
+        verify(paymentGateway).processRefund("pi_1", new BigDecimal("100.00"));
     }
 
     @Test
@@ -163,8 +163,8 @@ class PaymentApplicationServiceTest {
         service.processRefund(id);
 
         assertThat(tx.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
-        verify(stripePaymentPort).reverseProviderTransfer("tr_1", new BigDecimal("95.00"));
-        verify(stripePaymentPort).processRefund("pi_1", new BigDecimal("100.00"));
+        verify(paymentGateway).reverseProviderTransfer("tr_1", new BigDecimal("95.00"));
+        verify(paymentGateway).processRefund("pi_1", new BigDecimal("100.00"));
     }
 
     @Test
@@ -176,7 +176,7 @@ class PaymentApplicationServiceTest {
 
         assertThatThrownBy(() -> service.processRefund(id)).isInstanceOf(IllegalStateException.class);
 
-        verify(stripePaymentPort, never()).processRefund(anyString(), any());
+        verify(paymentGateway, never()).processRefund(anyString(), any());
     }
 
     @Test
@@ -191,7 +191,7 @@ class PaymentApplicationServiceTest {
         service.processRefund(id);
 
         assertThatThrownBy(() -> service.processRefund(id)).isInstanceOf(IllegalStateException.class);
-        verify(stripePaymentPort).processRefund("pi_1", new BigDecimal("100.00"));
+        verify(paymentGateway).processRefund("pi_1", new BigDecimal("100.00"));
     }
 
     @Test
@@ -213,7 +213,7 @@ class PaymentApplicationServiceTest {
         UUID providerId = UUID.randomUUID();
         ProviderPayoutSettings settings = new ProviderPayoutSettings(providerId);
         when(payoutSettingsRepository.findByProviderId(providerId)).thenReturn(Optional.of(settings));
-        when(stripePaymentPort.accountPayoutsEnabled("acct_unverified")).thenReturn(false);
+        when(paymentGateway.accountPayoutsEnabled("acct_unverified")).thenReturn(false);
         when(payoutSettingsRepository.save(any())).thenReturn(settings);
 
         service.updateStripeAccount(providerId, "acct_unverified");
