@@ -1,6 +1,7 @@
 package ma.noba.app.notification;
 
 import lombok.RequiredArgsConstructor;
+import ma.noba.notification.domain.model.DigestFrequency;
 import ma.noba.notification.domain.model.NotificationCategory;
 import ma.noba.notification.domain.model.NotificationChannel;
 import ma.noba.notification.domain.model.NotificationChannelPreference;
@@ -47,6 +48,12 @@ public class NotificationPreferenceAdapter implements NotificationPreferencePort
                         && s.getTimezone() != null
                         && !s.getTimezone().isBlank())
                 .map(s -> new QuietHours(s.getQuietHoursStart(), s.getQuietHoursEnd(), s.getTimezone()));
+    }
+
+    @Override
+    public Optional<Digest> digest(UUID userId) {
+        return settings.findByUserId(userId)
+                .map(s -> new Digest(DigestFrequency.parse(s.getDigest()), s.getTimezone()));
     }
 
     private boolean legacyEnabled(UUID userId, NotificationChannel channel) {

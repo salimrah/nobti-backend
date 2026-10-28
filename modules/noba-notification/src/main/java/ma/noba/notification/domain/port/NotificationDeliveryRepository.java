@@ -14,4 +14,8 @@ public interface NotificationDeliveryRepository {
     List<NotificationDelivery> findByNotificationId(UUID notificationId);
 
     List<NotificationDelivery> findDue(Instant now, Pageable pageable);
+
+    java.util.Optional<NotificationDelivery> findById(UUID id);
+
+    java.util.Optional<NotificationDelivery> findByProviderMessageId(String providerMessageId);
 }

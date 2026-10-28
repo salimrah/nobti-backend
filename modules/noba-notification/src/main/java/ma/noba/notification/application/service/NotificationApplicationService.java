@@ -6,10 +6,12 @@ import ma.noba.notification.domain.model.Notification;
 import ma.noba.notification.domain.model.NotificationCategory;
 import ma.noba.notification.domain.model.NotificationChannel;
 import ma.noba.notification.domain.model.NotificationDelivery;
+import ma.noba.notification.domain.model.NotificationDigestEntry;
 import ma.noba.notification.domain.model.NotificationEvent;
 import ma.noba.notification.domain.model.NotificationEventType;
 import ma.noba.notification.domain.model.NotificationStatus;
 import ma.noba.notification.domain.port.NotificationDeliveryRepository;
+import ma.noba.notification.domain.port.NotificationDigestEntryRepository;
 import ma.noba.notification.domain.port.NotificationEventRepository;
 import ma.noba.notification.domain.port.NotificationPort;
 import ma.noba.notification.domain.port.NotificationPreferencePort;
@@ -18,6 +20,7 @@ import ma.noba.shared.application.dto.PagedResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -41,9 +44,15 @@ public class NotificationApplicationService implements NotificationPort {
     private final NotificationDeliveryRepository deliveries;
     private final NotificationEventRepository events;
     private final NotificationPreferencePort preferences;
+    private final NotificationTemplateRenderer renderer;
+    private final NotificationDigestEntryRepository digestEntries;
 
+    /**
+     * Runs in its own transaction: feature modules call this from {@code AFTER_COMMIT} listeners,
+     * where the caller's transaction is already finished and joining it would fail.
+     */
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public UUID send(Command command) {
         if (command.dedupeKey() != null && !command.dedupeKey().isBlank()) {
             var existing = notifications.findByDedupeKey(command.dedupeKey());
@@ -55,16 +64,20 @@ public class NotificationApplicationService implements NotificationPort {
         NotificationCategory category = command.category() == null
                 ? NotificationCategory.TRANSACTIONAL
                 : NotificationCategory.valueOf(command.category().name());
+        NotificationTemplateRenderer.Rendered rendered = renderer.render(
+                command.type(), command.locale(), command.data(), command.title(), command.body());
         Notification notification = Notification.create(
                 command.userId(),
                 command.type(),
                 category,
                 command.priority(),
-                command.title(),
-                command.body(),
+                rendered.title(),
+                rendered.body(),
                 command.data(),
                 command.dedupeKey(),
                 command.locale());
+        notification.setTemplateKey(rendered.templateKey());
+        notification.setTemplateVersion(rendered.templateVersion());
         notification = notifications.saveNotification(notification);
         UUID notificationId = notification.getId();
 
@@ -72,6 +85,19 @@ public class NotificationApplicationService implements NotificationPort {
         deliveries.saveDelivery(NotificationDelivery.inApp(notificationId));
         events.record(NotificationEvent.of(notificationId, null,
                 NotificationEventType.CREATED, Map.of("type", notification.getType())));
+
+        // Non-urgent notifications are held for the user's digest instead of being pushed now.
+        Optional<NotificationPreferencePort.Digest> digest = category == NotificationCategory.MARKETING
+                ? preferences.digest(command.userId())
+                : Optional.empty();
+        if (digest.isPresent() && digest.get().enabled()) {
+            digestEntries.saveEntry(NotificationDigestEntry.of(command.userId(), notificationId));
+            events.record(NotificationEvent.of(notificationId, null, NotificationEventType.QUEUED,
+                    Map.of("digest", digest.get().frequency().name())));
+            notification.setStatus(NotificationStatus.QUEUED);
+            notifications.saveNotification(notification);
+            return notificationId;
+        }
 
         boolean pending = false;
         boolean suppressed = false;
@@ -115,6 +141,25 @@ public class NotificationApplicationService implements NotificationPort {
                 : suppressed ? NotificationStatus.PARTIAL : NotificationStatus.SENT);
         notifications.saveNotification(notification);
         return notificationId;
+    }
+
+    /**
+     * Queues the push delivery for a notification that was held back for a digest. Used when the
+     * user turns digests off, or when a notification is released outside its window.
+     */
+    @Transactional
+    public void queuePush(UUID notificationId) {
+        Notification notification = notifications.findById(notificationId).orElse(null);
+        if (notification == null) {
+            return;
+        }
+        NotificationDelivery delivery = NotificationDelivery.queued(
+                notificationId, NotificationChannel.PUSH, "push", null);
+        deliveries.saveDelivery(delivery);
+        events.record(NotificationEvent.of(notificationId, delivery.getId(),
+                NotificationEventType.QUEUED, Map.of("channel", "PUSH", "releasedFromDigest", true)));
+        notification.setStatus(NotificationStatus.QUEUED);
+        notifications.saveNotification(notification);
     }
 
     @Transactional(readOnly = true)
