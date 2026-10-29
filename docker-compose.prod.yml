@@ -86,7 +86,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      # The JVM takes ~2-3 minutes to boot on the e2-medium; do not mark it unhealthy early.
+      start_period: 240s
 
   postgres:
     image: postgres:16-alpine
