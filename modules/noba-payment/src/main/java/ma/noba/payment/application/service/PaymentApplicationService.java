@@ -102,6 +102,7 @@ public class PaymentApplicationService {
             transactionRepository.save(transaction);
 
             Payout payout = new Payout(transaction.getProviderId(), netAmount, transaction.getCurrency());
+            payout.setSourceChargeId(transaction.getStripeChargeId());
             payout.markProcessing(transferId);
             payoutRepository.save(payout);
         }
@@ -189,21 +190,70 @@ public class PaymentApplicationService {
 
     @Transactional
     public void processRefund(UUID transactionId) {
+        processRefund(transactionId, null, null);
+    }
+
+    /**
+     * Refunds all or part of a captured payment. A partial refund reverses the provider's net share
+     * of that amount, so the platform never pays out more than it keeps.
+     */
+    @Transactional
+    public void processRefund(UUID transactionId, BigDecimal amount, String reason) {
         // Row lock + status guard prevent two concurrent refunds from both passing the check.
         PaymentTransaction transaction = transactionRepository.findByIdForUpdate(transactionId)
             .orElseThrow(() -> new IllegalArgumentException("Transaction not found: " + transactionId));
-        if (transaction.getStatus() != PaymentStatus.SUCCEEDED) {
-            throw new IllegalStateException("Can only refund succeeded transactions");
+        if (transaction.getStatus() != PaymentStatus.SUCCEEDED
+                && transaction.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
+            throw new IllegalStateException("Only captured or partially refunded transactions can be refunded");
         }
 
-        // Claw back the provider's net transfer first, so a refund cannot leave the platform having
-        // both returned the customer's money and paid the provider out.
-        if (transaction.getStripeTransferId() != null && transaction.getNetAmount() != null) {
-            paymentGateway.reverseProviderTransfer(transaction.getStripeTransferId(), transaction.getNetAmount());
+        BigDecimal refundable = transaction.refundable();
+        if (refundable.signum() <= 0) {
+            throw new IllegalStateException("This transaction has already been fully refunded");
+        }
+        BigDecimal refundAmount = amount == null ? refundable : amount;
+        if (refundAmount.signum() <= 0) {
+            throw new IllegalArgumentException("Refund amount must be positive");
+        }
+        if (refundAmount.compareTo(refundable) > 0) {
+            throw new IllegalArgumentException("Refund amount exceeds the refundable balance (" + refundable + ")");
         }
 
-        paymentGateway.processRefund(transaction.getStripePaymentIntentId(), transaction.getAmount());
-        transaction.markRefunded();
+        // Claw back the provider's net share of the refund first, so a refund cannot leave the
+        // platform having both returned the customer's money and paid the provider out.
+        if (transaction.getStripeTransferId() != null && transaction.getNetAmount() != null
+                && transaction.getAmount().signum() > 0) {
+            BigDecimal feeShare = transaction.getFee() == null ? BigDecimal.ZERO
+                    : transaction.getFee().multiply(refundAmount)
+                        .divide(transaction.getAmount(), 2, java.math.RoundingMode.HALF_UP);
+            BigDecimal reversal = refundAmount.subtract(feeShare).max(BigDecimal.ZERO);
+            if (reversal.signum() > 0) {
+                paymentGateway.reverseProviderTransfer(transaction.getStripeTransferId(), reversal);
+            }
+        }
+
+        paymentGateway.processRefund(transaction.getStripePaymentIntentId(), refundAmount);
+        transaction.applyRefund(refundAmount, reason);
         transactionRepository.save(transaction);
+    }
+
+    /** Re-attempts a failed provider payout using the charge it was funded from. */
+    @Transactional
+    public void retryPayout(UUID payoutId) {
+        Payout payout = payoutRepository.findById(payoutId)
+            .orElseThrow(() -> new IllegalArgumentException("Payout not found: " + payoutId));
+        if (payout.getStatus() != PayoutStatus.FAILED) {
+            throw new IllegalStateException("Only failed payouts can be retried");
+        }
+        if (payout.getSourceChargeId() == null) {
+            throw new IllegalStateException("This payout has no source charge to retry from");
+        }
+        ProviderPayoutSettings settings = payoutSettingsRepository.findByProviderId(payout.getProviderId())
+            .filter(ProviderPayoutSettings::isPayoutsEnabled)
+            .orElseThrow(() -> new IllegalStateException("Provider payouts are not enabled"));
+        String transferId = paymentGateway.transferToProvider(
+            payout.getSourceChargeId(), settings.getStripeAccountId(), payout.getAmount(), payout.getCurrency());
+        payout.markProcessing(transferId);
+        payoutRepository.save(payout);
     }
 }

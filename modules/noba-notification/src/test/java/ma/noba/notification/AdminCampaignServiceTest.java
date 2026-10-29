@@ -3,6 +3,7 @@ package ma.noba.notification;
 import ma.noba.notification.application.service.AdminCampaignService;
 import ma.noba.notification.domain.model.NotificationCampaign;
 import ma.noba.notification.domain.port.AdminCampaignRepository;
+import ma.noba.notification.domain.port.NotificationDeliveryRepository;
 import ma.noba.notification.domain.port.NotificationPort;
 import ma.noba.shared.application.dto.PagedResponse;
 import ma.noba.shared.domain.port.AdminAudiencePort;
@@ -34,13 +35,14 @@ class AdminCampaignServiceTest {
     @Mock AdminAudiencePort audience;
     @Mock NotificationPort notifications;
     @Mock AdminAuditPort audit;
+    @Mock NotificationDeliveryRepository deliveries;
 
     private AdminCampaignService service;
     private final UUID actor = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
-        service = new AdminCampaignService(campaigns, audience, notifications, audit);
+        service = new AdminCampaignService(campaigns, audience, notifications, deliveries, audit);
         org.mockito.Mockito.lenient().when(campaigns.persist(any())).thenAnswer(invocation -> {
             NotificationCampaign campaign = invocation.getArgument(0);
             if (campaign.getId() == null) {
@@ -68,7 +70,7 @@ class AdminCampaignServiceTest {
         when(audience.page(AdminAudiencePort.Audience.PROVIDERS, 0, 200)).thenReturn(List.of(first, second));
         when(audience.page(AdminAudiencePort.Audience.PROVIDERS, 1, 200)).thenReturn(List.of());
 
-        var result = service.send(actor, "ops@noba.ma", "Holiday hours", "We open at 9.", "PROVIDERS");
+        var result = service.send(actor, "ops@noba.ma", "Holiday hours", "We open at 9.", "PROVIDERS", null);
 
         assertThat(result.sentCount()).isEqualTo(2);
         assertThat(result.status()).isEqualTo("SENT");
@@ -80,12 +82,12 @@ class AdminCampaignServiceTest {
     @Test
     @DisplayName("Empty copy or an empty audience is rejected")
     void validation() {
-        assertThatThrownBy(() -> service.send(actor, "ops", " ", "body", "ALL"))
+        assertThatThrownBy(() -> service.send(actor, "ops", " ", "body", "ALL", null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("required");
 
         when(audience.count(AdminAudiencePort.Audience.ALL)).thenReturn(0L);
-        assertThatThrownBy(() -> service.send(actor, "ops", "Title", "Body", "ALL"))
+        assertThatThrownBy(() -> service.send(actor, "ops", "Title", "Body", "ALL", null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("empty");
     }

@@ -55,6 +55,7 @@
              (1.32) is rejected by modern Docker daemons (>= 1.40 required), which manifests as
              "Could not find a valid Docker environment". Override with -Ddocker.api.version=... -->
         <docker.api.version>1.44</docker.api.version>
+        <google-cloud-storage.version>2.46.0</google-cloud-storage.version>
     </properties>
 
     <dependencies>

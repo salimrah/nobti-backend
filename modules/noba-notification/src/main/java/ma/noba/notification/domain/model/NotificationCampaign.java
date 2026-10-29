@@ -46,6 +46,15 @@ public class NotificationCampaign {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "scheduled_at")
+    private Instant scheduledAt;
+
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
+
+    @Column(name = "cancelled_by")
+    private UUID cancelledBy;
+
     @PrePersist
     void prePersist() {
         if (id == null) id = UUID.randomUUID();
@@ -69,5 +78,28 @@ public class NotificationCampaign {
         this.sentCount = sent;
         this.failedCount = failed;
         this.status = failed == 0 ? "SENT" : sent == 0 ? "FAILED" : "PARTIAL";
+    }
+
+    /** Creates a campaign that waits for {@link #scheduledAt} before sending. */
+    public static NotificationCampaign scheduled(String title, String body, String audience,
+                                                 int total, UUID createdBy, Instant scheduledAt) {
+        NotificationCampaign campaign = create(title, body, audience, total, createdBy);
+        campaign.status = "SCHEDULED";
+        campaign.scheduledAt = scheduledAt;
+        return campaign;
+    }
+
+    public void begin() {
+        this.status = "SENDING";
+    }
+
+    public void cancel(UUID actorId) {
+        this.status = "CANCELLED";
+        this.cancelledAt = Instant.now();
+        this.cancelledBy = actorId;
+    }
+
+    public boolean isScheduled() {
+        return "SCHEDULED".equals(status);
     }
 }

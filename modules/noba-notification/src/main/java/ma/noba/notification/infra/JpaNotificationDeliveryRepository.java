@@ -42,6 +42,12 @@ public interface JpaNotificationDeliveryRepository
                 .map(row -> new DeliveryWithType((NotificationDelivery) row[0], (String) row[1]));
     }
 
+    @Override
+    @Query("select d.channel, d.status, count(d) from NotificationDelivery d " +
+            "where d.notificationId in (select n.id from Notification n where n.dedupeKey like concat(:prefix, '%')) " +
+            "group by d.channel, d.status")
+    List<Object[]> statsForDedupePrefix(@Param("prefix") String prefix);
+
     @Query("select d from NotificationDelivery d " +
             "where d.status in :statuses and d.nextAttemptAt is not null and d.nextAttemptAt <= :now " +
             "order by d.nextAttemptAt asc")

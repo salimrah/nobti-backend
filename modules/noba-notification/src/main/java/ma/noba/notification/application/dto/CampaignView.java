@@ -13,5 +13,6 @@ public record CampaignView(
         int sentCount,
         int failedCount,
         UUID createdBy,
-        Instant createdAt) {
+        Instant createdAt,
+        Instant scheduledAt) {
 }

@@ -1,8 +1,17 @@
 package ma.noba.admin.application.service;
 
+import ma.noba.admin.application.dto.AdminAccountView;
+import ma.noba.admin.application.dto.AdminApiKeyView;
+import ma.noba.admin.application.dto.BulkActionResult;
+import ma.noba.admin.application.dto.BulkUserActionRequest;
+import ma.noba.admin.application.dto.CreateApiKeyRequest;
+import ma.noba.admin.application.dto.CreatedApiKeyResponse;
 import ma.noba.admin.application.dto.AdminAuditResponse;
+import ma.noba.admin.application.dto.CreateAdminRequest;
 import ma.noba.admin.application.dto.AdminPayoutView;
 import ma.noba.admin.application.dto.AdminProviderDetailView;
+import ma.noba.admin.application.dto.AdminProviderDocumentView;
+import ma.noba.admin.application.dto.AdminTransactionDetailView;
 import ma.noba.admin.application.dto.AdminTransactionView;
 import ma.noba.admin.application.dto.AdminQueueDetailView;
 import ma.noba.admin.application.dto.AdminQueueView;
@@ -11,11 +20,15 @@ import ma.noba.admin.application.dto.AdminUserDetailView;
 import ma.noba.shared.application.dto.PagedResponse;
 import ma.noba.shared.domain.model.UserStatus;
 import ma.noba.shared.domain.port.AdminIdentityPort;
+import ma.noba.shared.domain.port.AdminInsightsPort;
 import ma.noba.shared.domain.port.AdminPaymentPort;
 import ma.noba.shared.domain.port.AdminQueuePort;
 import ma.noba.shared.domain.port.AdminRolePort;
 import ma.noba.shared.domain.port.AdminUserDirectoryPort;
 import ma.noba.shared.domain.port.AdminProviderPort;
+import ma.noba.shared.domain.port.ProviderDocumentPort;
+import ma.noba.shared.domain.model.ApiKey;
+import ma.noba.shared.domain.port.service.ApiKeyRepository;
 import ma.noba.shared.domain.port.AdminUserPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,11 +50,18 @@ public class AdminService {
     private final AdminAuditService auditService;
     private final AdminPaymentPort adminPaymentPort;
     private final AdminRolePort adminRolePort;
+    private final AdminInsightsPort adminInsightsPort;
+    private final ProviderDocumentPort providerDocuments;
+    private final ApiKeyRepository apiKeys;
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
 
     public AdminService(AdminIdentityPort adminIdentityPort, AdminQueuePort adminQueuePort,
                         AdminUserPort adminUserPort, AdminProviderPort adminProviderPort,
                         AdminUserDirectoryPort adminUserDirectoryPort, AdminAuditService auditService,
-                        AdminPaymentPort adminPaymentPort, AdminRolePort adminRolePort) {
+                        AdminPaymentPort adminPaymentPort, AdminRolePort adminRolePort,
+                        AdminInsightsPort adminInsightsPort,
+                        ProviderDocumentPort providerDocuments,
+                        ApiKeyRepository apiKeys) {
         this.adminIdentityPort = adminIdentityPort;
         this.adminQueuePort = adminQueuePort;
         this.adminUserPort = adminUserPort;
@@ -50,6 +70,9 @@ public class AdminService {
         this.auditService = auditService;
         this.adminPaymentPort = adminPaymentPort;
         this.adminRolePort = adminRolePort;
+        this.adminInsightsPort = adminInsightsPort;
+        this.providerDocuments = providerDocuments;
+        this.apiKeys = apiKeys;
     }
 
     @Transactional(readOnly = true)
@@ -281,6 +304,67 @@ public class AdminService {
         auditService.record(actorId, resolveActor(actorId, actorLabel), action, "QUEUE", queueId, metadata);
     }
 
+    /** Every account that currently holds the ADMIN role. */
+    @Transactional(readOnly = true)
+    public List<AdminAccountView> listAdmins() {
+        List<UUID> ids = List.copyOf(adminRolePort.userIdsWithRole("ADMIN"));
+        Map<UUID, String> names = adminUserDirectoryPort.displayNames(ids);
+        return ids.stream()
+                .map(id -> adminIdentityPort.findUser(id)
+                        .map(user -> new AdminAccountView(
+                                user.id(),
+                                names.getOrDefault(id, user.email() != null ? user.email() : "Admin"),
+                                user.email(),
+                                user.status(),
+                                user.createdAt()))
+                        .orElse(null))
+                .filter(java.util.Objects::nonNull)
+                .sorted(java.util.Comparator.comparing(AdminAccountView::createdAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+                .toList();
+    }
+
+    /** Provisions an operations account and grants the ADMIN role. */
+    @Transactional
+    public AdminAccountView createAdmin(UUID actorId, String actorLabel, CreateAdminRequest request) {
+        UUID userId = adminIdentityPort.createAdmin(
+                request.email(), request.password(), request.firstName(), request.lastName());
+        java.util.Set<String> roles = new java.util.LinkedHashSet<>(adminRolePort.rolesOf(userId));
+        roles.add("USER");
+        roles.add("ADMIN");
+        adminRolePort.replaceRoles(userId, roles);
+        auditService.record(actorId, resolveActor(actorId, actorLabel), "ADMIN_CREATED", "USER", userId,
+                Map.of("email", request.email()));
+        return adminIdentityPort.findUser(userId)
+                .map(user -> new AdminAccountView(user.id(), request.email(), user.email(),
+                        user.status(), user.createdAt()))
+                .orElseThrow(() -> new IllegalStateException("Created account not found"));
+    }
+
+    /**
+     * Removes the ADMIN role from an account and revokes its sessions. Guards against self-lockout
+     * and against removing the last administrator.
+     */
+    @Transactional
+    public void revokeAdmin(UUID actorId, String actorLabel, UUID userId) {
+        if (actorId.equals(userId)) {
+            throw new IllegalArgumentException("You cannot revoke your own administrator access");
+        }
+        java.util.Set<String> before = new java.util.LinkedHashSet<>(adminRolePort.rolesOf(userId));
+        if (!before.contains("ADMIN")) {
+            throw new IllegalArgumentException("This account is not an administrator");
+        }
+        if (adminRolePort.countAdmins() <= 1) {
+            throw new IllegalArgumentException("The last administrator cannot be removed");
+        }
+        before.remove("ADMIN");
+        before.add("USER");
+        adminRolePort.replaceRoles(userId, before);
+        adminIdentityPort.revokeSessions(userId);
+        auditService.record(actorId, resolveActor(actorId, actorLabel), "ADMIN_REVOKED", "USER", userId,
+                Map.of("roles", before));
+    }
+
     @Transactional(readOnly = true)
     public AdminUserDetailView userDetail(UUID userId) {
         AdminIdentityPort.UserState user = adminIdentityPort.findUser(userId)
@@ -385,6 +469,185 @@ public class AdminService {
         return row.toString();
     }
 
+    /** Applies SUSPEND/ACTIVATE to a bounded batch, reporting each outcome. */
+    @Transactional
+    public List<BulkActionResult> bulkUserAction(UUID actorId, String actorLabel, BulkUserActionRequest request) {
+        if (request.userIds() == null || request.userIds().isEmpty()) {
+            throw new IllegalArgumentException("Select at least one account");
+        }
+        if (request.userIds().size() > 200) {
+            throw new IllegalArgumentException("At most 200 accounts per batch");
+        }
+        String action = request.action() == null ? "" : request.action().trim().toUpperCase(java.util.Locale.ROOT);
+        if (!"SUSPEND".equals(action) && !"ACTIVATE".equals(action)) {
+            throw new IllegalArgumentException("Action must be SUSPEND or ACTIVATE");
+        }
+        List<BulkActionResult> results = new java.util.ArrayList<>();
+        for (UUID userId : request.userIds()) {
+            if (actorId.equals(userId)) {
+                results.add(new BulkActionResult(userId, false, "You cannot change your own account"));
+                continue;
+            }
+            try {
+                if ("SUSPEND".equals(action)) {
+                    suspendUser(actorId, actorLabel, userId, request.reason());
+                } else {
+                    activateUser(actorId, actorLabel, userId);
+                }
+                results.add(new BulkActionResult(userId, true, null));
+            } catch (Exception e) {
+                results.add(new BulkActionResult(userId, false, e.getMessage()));
+            }
+        }
+        return results;
+    }
+
+    /** Rebuilds the external provider search index. */
+    @Transactional
+    public boolean reindexProviders(UUID actorId, String actorLabel) {
+        boolean ran = adminProviderPort.reindexSearch();
+        auditService.record(actorId, resolveActor(actorId, actorLabel), "PROVIDER_SEARCH_REINDEXED",
+                "SYSTEM", null, Map.of("indexed", ran));
+        return ran;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminApiKeyView> listApiKeys() {
+        return apiKeys.findAllByOrderByCreatedAtDesc().stream()
+                .map(AdminService::toApiKeyView).toList();
+    }
+
+    @Transactional
+    public CreatedApiKeyResponse createApiKey(UUID actorId, String actorLabel, CreateApiKeyRequest request) {
+        String owner = request.owner() == null ? "" : request.owner().trim();
+        if (owner.isEmpty()) {
+            throw new IllegalArgumentException("Owner is required");
+        }
+        byte[] raw = new byte[32];
+        RANDOM.nextBytes(raw);
+        String plaintext = "noba_" + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
+        ApiKey key = new ApiKey();
+        key.setKeyHash(org.apache.commons.codec.digest.DigestUtils.sha256Hex(plaintext));
+        key.setOwner(owner);
+        key.setPermissions(request.permissions() == null || request.permissions().isBlank()
+                ? "read" : request.permissions().trim().toLowerCase(java.util.Locale.ROOT));
+        key.setExpiresAt(request.expiresAt());
+        apiKeys.save(key);
+        auditService.record(actorId, resolveActor(actorId, actorLabel), "API_KEY_CREATED", "API_KEY",
+                key.getId(), Map.of("owner", owner, "permissions", key.getPermissions()));
+        return new CreatedApiKeyResponse(key.getId(), key.getOwner(), plaintext,
+                key.getPermissions(), key.getExpiresAt());
+    }
+
+    @Transactional
+    public void revokeApiKey(UUID actorId, String actorLabel, UUID keyId) {
+        ApiKey key = apiKeys.findById(keyId)
+                .orElseThrow(() -> new NoSuchElementException("API key not found"));
+        if (key.isRevoked()) {
+            throw new IllegalArgumentException("This API key is already revoked");
+        }
+        key.setRevoked(true);
+        apiKeys.save(key);
+        auditService.record(actorId, resolveActor(actorId, actorLabel), "API_KEY_REVOKED", "API_KEY",
+                keyId, Map.of("owner", key.getOwner()));
+    }
+
+    private static AdminApiKeyView toApiKeyView(ApiKey key) {
+        return new AdminApiKeyView(key.getId(), key.getOwner(), key.getPermissions(),
+                key.getExpiresAt(), key.isRevoked(), key.getCreatedAt());
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminProviderDocumentView> providerDocuments(UUID providerId) {
+        String providerName = adminProviderPort.names(List.of(providerId))
+                .getOrDefault(providerId, "Provider");
+        return providerDocuments.list(providerId).stream()
+                .map(document -> toDocumentView(document, providerName))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminProviderDocumentView> pendingDocuments() {
+        List<ProviderDocumentPort.DocumentRow> rows = providerDocuments.pending();
+        Map<UUID, String> names = adminProviderPort.names(
+                rows.stream().map(ProviderDocumentPort.DocumentRow::providerId).distinct().toList());
+        return rows.stream()
+                .map(document -> toDocumentView(document,
+                        names.getOrDefault(document.providerId(), "Provider")))
+                .toList();
+    }
+
+    @Transactional
+    public AdminProviderDocumentView reviewDocument(UUID actorId, String actorLabel, UUID documentId,
+                                                    String status, String note) {
+        ProviderDocumentPort.DocumentRow before = providerDocuments.find(documentId)
+                .orElseThrow(() -> new NoSuchElementException("Document not found"));
+        ProviderDocumentPort.DocumentRow after = providerDocuments.review(documentId, status, note, actorId);
+        Map<String, Object> metadata = statusChange(before.status(), after.status());
+        metadata.put("providerId", before.providerId().toString());
+        metadata.put("type", before.type());
+        if (note != null && !note.isBlank()) {
+            metadata.put("note", note.trim());
+        }
+        auditService.record(actorId, resolveActor(actorId, actorLabel), "PROVIDER_DOCUMENT_REVIEWED",
+                "PROVIDER_DOCUMENT", documentId, metadata);
+        String providerName = adminProviderPort.names(List.of(after.providerId()))
+                .getOrDefault(after.providerId(), "Provider");
+        return toDocumentView(after, providerName);
+    }
+
+    private static AdminProviderDocumentView toDocumentView(ProviderDocumentPort.DocumentRow document,
+                                                            String providerName) {
+        return new AdminProviderDocumentView(
+                document.id(), document.providerId(), providerName, document.type(),
+                document.fileName(), document.contentType(), document.sizeBytes(), document.status(),
+                document.reviewerNote(), document.createdAt(), document.reviewedAt());
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminIdentityPort.SessionRow> sessions(UUID userId) {
+        return adminIdentityPort.sessions(userId);
+    }
+
+    @Transactional
+    public void revokeSessions(UUID actorId, String actorLabel, UUID userId) {
+        int count = adminIdentityPort.sessions(userId).size();
+        adminIdentityPort.revokeSessions(userId);
+        auditService.record(actorId, resolveActor(actorId, actorLabel), "USER_SESSIONS_REVOKED",
+                "USER", userId, Map.of("revoked", count));
+    }
+
+    @Transactional(readOnly = true)
+    public AdminInsightsPort.Insights insights(int days) {
+        int window = Math.min(Math.max(days, 1), 365);
+        java.time.Instant to = java.time.Instant.now();
+        return adminInsightsPort.insights(to.minus(java.time.Duration.ofDays(window)), to);
+    }
+
+    @Transactional(readOnly = true)
+    public String exportAudit(String action, String targetType) {
+        PagedResponse<AdminAuditResponse> page = auditService.search(action, targetType, 0, 5000);
+        StringBuilder csv = new StringBuilder(
+                "id,created_at,actor_id,actor_label,action,target_type,target_id,metadata\n");
+        for (AdminAuditResponse row : page.content()) {
+            csv.append(csvRow(row.id(), row.createdAt(), row.actorId(), row.actorLabel(), row.action(),
+                    row.targetType(), row.targetId(), metadata(row.metadata()))).append('\n');
+        }
+        return csv.toString();
+    }
+
+    private static String metadata(Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return "";
+        }
+        StringBuilder value = new StringBuilder();
+        metadata.forEach((key, entry) -> {
+            if (value.length() > 0) value.append("; ");
+            value.append(key).append('=').append(entry);
+        });
+        return value.toString();
+    }
+
     @Transactional(readOnly = true)
     public PagedResponse<AdminTransactionView> searchTransactions(String status, int page, int size) {
         PagedResponse<AdminPaymentPort.TransactionRow> rows =
@@ -417,18 +680,59 @@ public class AdminService {
                 rows.page(), rows.size(), rows.totalElements());
     }
 
+    @Transactional(readOnly = true)
+    public AdminTransactionDetailView transactionDetail(UUID transactionId) {
+        AdminPaymentPort.TransactionDetail detail = adminPaymentPort.findTransactionDetail(transactionId)
+                .orElseThrow(() -> new NoSuchElementException("Transaction not found"));
+        String clientName = adminUserDirectoryPort.displayNames(List.of(detail.userId()))
+                .getOrDefault(detail.userId(), "Client");
+        String providerName = adminProviderPort.names(List.of(detail.providerId()))
+                .getOrDefault(detail.providerId(), "Provider");
+        return new AdminTransactionDetailView(
+                detail.id(), detail.userId(), clientName, detail.providerId(), providerName,
+                detail.serviceId(), detail.amount(), detail.fee(), detail.netAmount(),
+                detail.refundedAmount(), detail.refundReason(), detail.currency(), detail.status(),
+                detail.paymentIntentId(), detail.chargeId(), detail.transferId(),
+                detail.failureMessage(), detail.createdAt(), detail.completedAt());
+    }
+
     @Transactional
     public void refundTransaction(UUID actorId, String actorLabel, UUID transactionId) {
-        AdminPaymentPort.TransactionRow before = adminPaymentPort.findTransaction(transactionId)
+        refundTransaction(actorId, actorLabel, transactionId, null, null);
+    }
+
+    @Transactional
+    public void refundTransaction(UUID actorId, String actorLabel, UUID transactionId,
+                                  java.math.BigDecimal amount, String reason) {
+        AdminPaymentPort.TransactionDetail before = adminPaymentPort.findTransactionDetail(transactionId)
                 .orElseThrow(() -> new NoSuchElementException("Transaction not found"));
-        adminPaymentPort.refund(transactionId);
-        AdminPaymentPort.TransactionRow after = adminPaymentPort.findTransaction(transactionId).orElse(before);
+        adminPaymentPort.refund(transactionId, amount, reason);
+        AdminPaymentPort.TransactionDetail after = adminPaymentPort.findTransactionDetail(transactionId)
+                .orElse(before);
         Map<String, Object> metadata = statusChange(before.status(), after.status());
         metadata.put("amount", before.amount());
+        metadata.put("refunded", amount == null ? before.amount() : amount);
+        metadata.put("totalRefunded", after.refundedAmount());
+        if (reason != null && !reason.isBlank()) {
+            metadata.put("reason", reason.trim());
+        }
         metadata.put("currency", before.currency());
         metadata.put("providerId", before.providerId().toString());
         auditService.record(actorId, resolveActor(actorId, actorLabel), "PAYMENT_REFUNDED",
                 "PAYMENT", transactionId, metadata);
+    }
+
+    @Transactional
+    public void retryPayout(UUID actorId, String actorLabel, UUID payoutId) {
+        AdminPaymentPort.PayoutRow before = adminPaymentPort.findPayout(payoutId)
+                .orElseThrow(() -> new NoSuchElementException("Payout not found"));
+        adminPaymentPort.retryPayout(payoutId);
+        Map<String, Object> metadata = statusChange(before.status(), "PROCESSING");
+        metadata.put("amount", before.amount());
+        metadata.put("currency", before.currency());
+        metadata.put("providerId", before.providerId().toString());
+        auditService.record(actorId, resolveActor(actorId, actorLabel), "PAYOUT_RETRIED",
+                "PAYOUT", payoutId, metadata);
     }
 
     @Transactional(readOnly = true)

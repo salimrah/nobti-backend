@@ -32,6 +32,9 @@ public interface AdminProviderPort {
 
     void reactivateProvider(UUID providerId);
 
+    /** Rebuilds the external search index when one is configured. @return true when it ran. */
+    boolean reindexSearch();
+
     record PendingProvider(UUID id, UUID userId, String name, String category, String status, Instant createdAt) {
     }
 

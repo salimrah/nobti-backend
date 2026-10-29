@@ -70,6 +70,15 @@ public class AdminRolePortAdapter implements AdminRolePort {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Set<UUID> userIdsWithRole(String role) {
+        return userRoles.findByRoleName(role.trim().toUpperCase(Locale.ROOT)).stream()
+                .filter(UserRole::isActive)
+                .map(UserRole::getUserId)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    @Override
     public Set<String> assignableRoles() {
         return Set.copyOf(ASSIGNABLE);
     }

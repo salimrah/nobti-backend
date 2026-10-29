@@ -59,6 +59,12 @@ public class PaymentTransaction {
     @Column(length = 500)
     private String failureMessage;
 
+    @Column(name = "refunded_amount", precision = 10, scale = 2)
+    private BigDecimal refundedAmount = BigDecimal.ZERO;
+
+    @Column(name = "refund_reason", length = 500)
+    private String refundReason;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -91,7 +97,28 @@ public class PaymentTransaction {
 
     public void markRefunded() {
         this.status = PaymentStatus.REFUNDED;
+        this.refundedAmount = amount;
         this.completedAt = Instant.now();
+    }
+
+    /** Applies a (possibly partial) refund and derives the resulting status. */
+    public void applyRefund(BigDecimal refundAmount, String reason) {
+        BigDecimal already = refundedAmount == null ? BigDecimal.ZERO : refundedAmount;
+        BigDecimal total = already.add(refundAmount);
+        this.refundedAmount = total;
+        if (reason != null && !reason.isBlank()) {
+            this.refundReason = reason.trim();
+        }
+        this.status = total.compareTo(amount) >= 0
+                ? PaymentStatus.REFUNDED
+                : PaymentStatus.PARTIALLY_REFUNDED;
+        this.completedAt = Instant.now();
+    }
+
+    /** Amount still refundable on this transaction. */
+    public BigDecimal refundable() {
+        BigDecimal already = refundedAmount == null ? BigDecimal.ZERO : refundedAmount;
+        return amount.subtract(already);
     }
 
     /** Records the Stripe transfer that paid the provider, so it can be reversed on refund. */

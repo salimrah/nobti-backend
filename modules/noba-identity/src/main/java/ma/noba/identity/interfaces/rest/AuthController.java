@@ -33,6 +33,7 @@ public class AuthController {
     private final PasswordResetService passwordResetService;
     private final AccountLinkingService accountLinkingService;
     private final RateLimiterService rateLimiter;
+    private final ma.noba.identity.application.service.PasswordChangeService passwordChangeService;
 
     private static final Pattern UUID_PATTERN = Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", Pattern.CASE_INSENSITIVE);
 
@@ -163,6 +164,16 @@ public class AuthController {
     @GetMapping("/hello")
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("noba-backend is running");
+    }
+
+    @PutMapping("/password")
+    public ResponseEntity<Void> changePassword(@AuthenticationPrincipal org.springframework.security.core.Authentication auth,
+                                               @Valid @RequestBody ChangePasswordRequest request) {
+        UUID userId = extractUserId(auth);
+        String label = auth.getPrincipal() instanceof ma.noba.shared.domain.user.UserPrincipal principal
+                ? principal.email() : null;
+        passwordChangeService.change(userId, label, request.currentPassword(), request.newPassword());
+        return ResponseEntity.noContent().build();
     }
 
     // Item 6: List active sessions

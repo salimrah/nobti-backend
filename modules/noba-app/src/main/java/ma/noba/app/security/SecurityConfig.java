@@ -58,7 +58,13 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(problemDetailsAuthEntryPoint))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/sessions/**").authenticated()
+                        .requestMatchers("/api/v1/auth/password").authenticated()
+                        // The second login step runs before tokens exist.
+                        .requestMatchers("/api/v1/auth/2fa/verify").permitAll()
+                        .requestMatchers("/api/v1/auth/2fa", "/api/v1/auth/2fa/**").authenticated()
                         .requestMatchers("/api/v1/providers/self/**").authenticated()
+                        .requestMatchers("/api/v1/providers/documents/*/file").authenticated()
+                        .requestMatchers("/api/v1/storage/**").authenticated()
                         .requestMatchers("/api/v1/providers/*/wait-insights").authenticated()
                         // State-changing queue endpoints must be authenticated (they dereference the
                         // caller's principal). Public queue reads (status) remain permitted below.
@@ -82,6 +88,10 @@ public class SecurityConfig {
                         ).authenticated()
                         .requestMatchers(
                                 "/api/v1/auth/**",
+                                "/api/v1/app/**",
+                                // Public uploads served by the storage layer (private files live
+                                // under a separate prefix and are streamed through the API).
+                                "/media/**",
                                 "/api/v1/providers/**",
                                 "/api/v1/stripe/webhook",
                                 // OpenAPI spec + Swagger UI (used to generate client types).

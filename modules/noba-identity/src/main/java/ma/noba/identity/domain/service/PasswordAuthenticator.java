@@ -27,6 +27,8 @@ public class PasswordAuthenticator implements Authenticator<PasswordAuthRequest,
     private final AuditService auditService;
     private final EventBus eventBus;
     private final HashService hashService;
+    private final TotpService totpService;
+    private final UserRolePort userRolePort;
 
     @Override
     public boolean supports(AuthMethod method) {
@@ -66,6 +68,11 @@ public class PasswordAuthenticator implements Authenticator<PasswordAuthRequest,
         loginAttemptLimiter.reset(emailNorm);
         auditService.record(user.getId(), "LOGIN", null, null);
         eventBus.publish(new UserAuthenticatedEvent(user.getId().toString(), "email_password"));
+
+        // Administrators with TOTP enabled must present a code before tokens are issued.
+        if (totpService.isEnabled(user.getId()) && userRolePort.findRolesByUserId(user.getId()).contains("ADMIN")) {
+            return AuthToken.mfaChallenge(tokens.issueMfaToken(user));
+        }
         return tokens.issueForUser(user, req.deviceId());
     }
 }

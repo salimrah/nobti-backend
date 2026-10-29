@@ -33,6 +33,16 @@ public class AdminNotificationController {
         return ResponseEntity.ok(deliveries.search(status, channel, page, size));
     }
 
+    @GetMapping("/{deliveryId}")
+    public ResponseEntity<AdminDeliveryView> detail(@PathVariable UUID deliveryId) {
+        return ResponseEntity.ok(deliveries.detail(deliveryId));
+    }
+
+    @PostMapping("/{deliveryId}/resend")
+    public ResponseEntity<AdminDeliveryView> resend(@PathVariable UUID deliveryId) {
+        return ResponseEntity.ok(deliveries.resend(deliveryId));
+    }
+
     @PostMapping("/{deliveryId}/retry")
     public ResponseEntity<AdminDeliveryView> retry(@PathVariable UUID deliveryId) {
         return ResponseEntity.ok(deliveries.retry(deliveryId));

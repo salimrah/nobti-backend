@@ -1,9 +1,23 @@
 package ma.noba.admin.interfaces.rest;
 
+import jakarta.validation.Valid;
+import ma.noba.admin.application.dto.AdminAccountView;
+import ma.noba.admin.application.dto.AdminApiKeyView;
+import ma.noba.admin.application.dto.BulkActionResult;
+import ma.noba.admin.application.dto.BulkUserActionRequest;
+import ma.noba.admin.application.dto.CreateApiKeyRequest;
+import ma.noba.admin.application.dto.CreatedApiKeyResponse;
 import ma.noba.admin.application.dto.AdminAuditResponse;
+import ma.noba.admin.application.dto.CreateAdminRequest;
 import ma.noba.admin.application.dto.AdminPayoutView;
 import ma.noba.admin.application.dto.AdminProviderDetailView;
+import ma.noba.admin.application.dto.AdminProviderDocumentView;
+import ma.noba.admin.application.dto.ReviewDocumentRequest;
+import ma.noba.shared.domain.port.AdminIdentityPort;
+import ma.noba.shared.domain.port.AdminInsightsPort;
+import ma.noba.admin.application.dto.AdminTransactionDetailView;
 import ma.noba.admin.application.dto.AdminTransactionView;
+import ma.noba.admin.application.dto.RefundRequest;
 import ma.noba.admin.application.dto.AdminUserDetailView;
 import ma.noba.admin.application.dto.UpdateUserRolesRequest;
 import ma.noba.admin.application.dto.AdminQueueDetailView;
@@ -61,6 +75,73 @@ public class AdminController {
                 adminService.updateRoles(principal.id(), principal.email(), userId, request.roles()));
     }
 
+    @GetMapping("/admins")
+    public ResponseEntity<List<AdminAccountView>> listAdmins() {
+        return ResponseEntity.ok(adminService.listAdmins());
+    }
+
+    @PostMapping("/admins")
+    public ResponseEntity<AdminAccountView> createAdmin(@AuthenticationPrincipal UserPrincipal principal,
+                                                        @Valid @RequestBody CreateAdminRequest request) {
+        return ResponseEntity.ok(adminService.createAdmin(principal.id(), principal.email(), request));
+    }
+
+    @DeleteMapping("/admins/{userId}")
+    public ResponseEntity<Void> revokeAdmin(@AuthenticationPrincipal UserPrincipal principal,
+                                            @PathVariable UUID userId) {
+        adminService.revokeAdmin(principal.id(), principal.email(), userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/users/{userId}/sessions")
+    public ResponseEntity<java.util.List<AdminIdentityPort.SessionRow>> sessions(@PathVariable UUID userId) {
+        return ResponseEntity.ok(adminService.sessions(userId));
+    }
+
+    @DeleteMapping("/users/{userId}/sessions")
+    public ResponseEntity<Void> revokeSessions(@AuthenticationPrincipal UserPrincipal principal,
+                                               @PathVariable UUID userId) {
+        adminService.revokeSessions(principal.id(), principal.email(), userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/users/bulk")
+    public ResponseEntity<List<BulkActionResult>> bulkUserAction(@AuthenticationPrincipal UserPrincipal principal,
+                                                                 @RequestBody BulkUserActionRequest request) {
+        return ResponseEntity.ok(adminService.bulkUserAction(principal.id(), principal.email(), request));
+    }
+
+    @PostMapping("/providers/reindex")
+    public ResponseEntity<java.util.Map<String, Boolean>> reindexProviders(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(java.util.Map.of(
+                "reindexed", adminService.reindexProviders(principal.id(), principal.email())));
+    }
+
+    @GetMapping("/api-keys")
+    public ResponseEntity<List<AdminApiKeyView>> listApiKeys() {
+        return ResponseEntity.ok(adminService.listApiKeys());
+    }
+
+    @PostMapping("/api-keys")
+    public ResponseEntity<CreatedApiKeyResponse> createApiKey(@AuthenticationPrincipal UserPrincipal principal,
+                                                              @RequestBody CreateApiKeyRequest request) {
+        return ResponseEntity.ok(adminService.createApiKey(principal.id(), principal.email(), request));
+    }
+
+    @DeleteMapping("/api-keys/{keyId}")
+    public ResponseEntity<Void> revokeApiKey(@AuthenticationPrincipal UserPrincipal principal,
+                                             @PathVariable UUID keyId) {
+        adminService.revokeApiKey(principal.id(), principal.email(), keyId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/insights")
+    public ResponseEntity<AdminInsightsPort.Insights> insights(
+            @RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(adminService.insights(days));
+    }
+
     @PutMapping("/users/{userId}/suspend")
     public ResponseEntity<Void> suspendUser(@AuthenticationPrincipal UserPrincipal principal,
                                             @PathVariable UUID userId,
@@ -102,6 +183,25 @@ public class AdminController {
                                                    @PathVariable UUID providerId) {
         adminService.reactivateProvider(principal.id(), principal.email(), providerId);
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/providers/{providerId}/documents")
+    public ResponseEntity<List<AdminProviderDocumentView>> providerDocuments(@PathVariable UUID providerId) {
+        return ResponseEntity.ok(adminService.providerDocuments(providerId));
+    }
+
+    @GetMapping("/documents/pending")
+    public ResponseEntity<List<AdminProviderDocumentView>> pendingDocuments() {
+        return ResponseEntity.ok(adminService.pendingDocuments());
+    }
+
+    @PostMapping("/documents/{documentId}/review")
+    public ResponseEntity<AdminProviderDocumentView> reviewDocument(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID documentId,
+            @RequestBody ReviewDocumentRequest request) {
+        return ResponseEntity.ok(adminService.reviewDocument(principal.id(), principal.email(),
+                documentId, request.status(), request.note()));
     }
 
     @GetMapping("/providers/pending")
@@ -172,10 +272,25 @@ public class AdminController {
         return ResponseEntity.ok(adminService.searchTransactions(status, page, size));
     }
 
+    @GetMapping("/payments/transactions/{transactionId}")
+    public ResponseEntity<AdminTransactionDetailView> transactionDetail(@PathVariable UUID transactionId) {
+        return ResponseEntity.ok(adminService.transactionDetail(transactionId));
+    }
+
     @PostMapping("/payments/transactions/{transactionId}/refund")
     public ResponseEntity<Void> refundTransaction(@AuthenticationPrincipal UserPrincipal principal,
-                                                  @PathVariable UUID transactionId) {
-        adminService.refundTransaction(principal.id(), principal.email(), transactionId);
+                                                  @PathVariable UUID transactionId,
+                                                  @RequestBody(required = false) RefundRequest request) {
+        adminService.refundTransaction(principal.id(), principal.email(), transactionId,
+                request == null ? null : request.amount(),
+                request == null ? null : request.reason());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/payments/payouts/{payoutId}/retry")
+    public ResponseEntity<Void> retryPayout(@AuthenticationPrincipal UserPrincipal principal,
+                                            @PathVariable UUID payoutId) {
+        adminService.retryPayout(principal.id(), principal.email(), payoutId);
         return ResponseEntity.ok().build();
     }
 
@@ -185,6 +300,12 @@ public class AdminController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(adminService.searchPayouts(status, page, size));
+    }
+
+    @GetMapping(value = "/exports/audit.csv", produces = "text/csv")
+    public ResponseEntity<String> exportAudit(@RequestParam(required = false) String action,
+                                              @RequestParam(required = false) String targetType) {
+        return csv("audit.csv", adminService.exportAudit(action, targetType));
     }
 
     @GetMapping(value = "/exports/users.csv", produces = "text/csv")

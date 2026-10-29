@@ -42,6 +42,31 @@ public class NotificationDeliveryAdminService {
                 result.getNumber(), result.getSize(), result.getTotalElements());
     }
 
+    @Transactional(readOnly = true)
+    public AdminDeliveryView detail(UUID deliveryId) {
+        return toView(deliveries.findById(deliveryId)
+                .orElseThrow(() -> new NoSuchElementException("Delivery not found")), null);
+    }
+
+    /** Re-queues any delivery that is not currently in flight (used to resend a failed or lost message). */
+    @Transactional
+    public AdminDeliveryView resend(UUID deliveryId) {
+        NotificationDelivery delivery = deliveries.findById(deliveryId)
+                .orElseThrow(() -> new NoSuchElementException("Delivery not found"));
+        if (delivery.getStatus() == DeliveryStatus.QUEUED || delivery.getStatus() == DeliveryStatus.SENDING) {
+            throw new IllegalArgumentException("This delivery is already queued");
+        }
+        delivery.setStatus(DeliveryStatus.QUEUED);
+        delivery.setNextAttemptAt(Instant.now());
+        delivery.setErrorCode(null);
+        delivery.setErrorMessage(null);
+        deliveries.saveDelivery(delivery);
+        events.record(NotificationEvent.of(delivery.getNotificationId(), delivery.getId(),
+                NotificationEventType.QUEUED,
+                Map.of("resend", true, "channel", delivery.getChannel().name())));
+        return toView(delivery, null);
+    }
+
     @Transactional
     public AdminDeliveryView retry(UUID deliveryId) {
         NotificationDelivery delivery = deliveries.findById(deliveryId)

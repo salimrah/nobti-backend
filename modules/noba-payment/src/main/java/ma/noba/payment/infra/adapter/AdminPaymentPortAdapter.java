@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -61,8 +62,45 @@ public class AdminPaymentPortAdapter implements AdminPaymentPort {
     }
 
     @Override
+    public Optional<TransactionDetail> findTransactionDetail(UUID transactionId) {
+        return transactions.findById(transactionId).map(transaction -> new TransactionDetail(
+                transaction.getId(),
+                transaction.getUserId(),
+                transaction.getProviderId(),
+                transaction.getServiceId(),
+                transaction.getAmount(),
+                transaction.getFee(),
+                transaction.getNetAmount(),
+                transaction.getRefundedAmount(),
+                transaction.getRefundReason(),
+                transaction.getCurrency(),
+                transaction.getStatus().name(),
+                transaction.getStripePaymentIntentId(),
+                transaction.getStripeChargeId(),
+                transaction.getStripeTransferId(),
+                transaction.getFailureMessage(),
+                transaction.getCreatedAt(),
+                transaction.getCompletedAt()));
+    }
+
+    @Override
+    public Optional<PayoutRow> findPayout(UUID payoutId) {
+        return payouts.findById(payoutId).map(AdminPaymentPortAdapter::toRow);
+    }
+
+    @Override
     public void refund(UUID transactionId) {
         paymentService.processRefund(transactionId);
+    }
+
+    @Override
+    public void refund(UUID transactionId, BigDecimal amount, String reason) {
+        paymentService.processRefund(transactionId, amount, reason);
+    }
+
+    @Override
+    public void retryPayout(UUID payoutId) {
+        paymentService.retryPayout(payoutId);
     }
 
     private static TransactionRow toRow(PaymentTransaction transaction) {

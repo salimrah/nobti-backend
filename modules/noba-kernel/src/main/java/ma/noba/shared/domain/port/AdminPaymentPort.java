@@ -16,7 +16,17 @@ public interface AdminPaymentPort {
 
     Optional<TransactionRow> findTransaction(UUID transactionId);
 
+    Optional<TransactionDetail> findTransactionDetail(UUID transactionId);
+
+    Optional<PayoutRow> findPayout(UUID payoutId);
+
     void refund(UUID transactionId);
+
+    /** Refunds all or part of a transaction; null amount means "everything still refundable". */
+    void refund(UUID transactionId, BigDecimal amount, String reason);
+
+    /** Re-attempts a payout that previously failed. */
+    void retryPayout(UUID payoutId);
 
     record TransactionRow(
             UUID id,
@@ -28,6 +38,26 @@ public interface AdminPaymentPort {
             String currency,
             String status,
             String paymentIntentId,
+            String failureMessage,
+            Instant createdAt,
+            Instant completedAt) {
+    }
+
+    record TransactionDetail(
+            UUID id,
+            UUID userId,
+            UUID providerId,
+            UUID serviceId,
+            BigDecimal amount,
+            BigDecimal fee,
+            BigDecimal netAmount,
+            BigDecimal refundedAmount,
+            String refundReason,
+            String currency,
+            String status,
+            String paymentIntentId,
+            String chargeId,
+            String transferId,
             String failureMessage,
             Instant createdAt,
             Instant completedAt) {

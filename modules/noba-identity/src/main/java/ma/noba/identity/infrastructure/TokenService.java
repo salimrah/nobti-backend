@@ -2,6 +2,7 @@ package ma.noba.identity.infrastructure;
 
 import com.nimbusds.jose.JWSSigner;
 import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import lombok.RequiredArgsConstructor;
@@ -24,12 +25,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.PrivateKey;
+import java.security.interfaces.RSAPublicKey;
 import java.text.ParseException;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -118,6 +122,52 @@ public class TokenService implements TokenPort {
                         rt.getExpiresAt(),
                         rt.getLastUsedAt()))
                 .toList();
+    }
+
+    @Override
+    public String issueMfaToken(User user) {
+        try {
+            var now = Instant.now();
+            var claims = new JWTClaimsSet.Builder()
+                    .subject(user.getId().toString())
+                    .jwtID(UUID.randomUUID().toString())
+                    .issuer(props.jwt.issuer)
+                    .issueTime(Date.from(now))
+                    .expirationTime(Date.from(now.plusSeconds(300)))
+                    .claim("purpose", "mfa")
+                    .build();
+            var jwt = new SignedJWT(keyManager.currentHeader(), claims);
+            jwt.sign(new RSASSASigner(keyManager.currentPrivateKey()));
+            return jwt.serialize();
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to issue MFA token", e);
+        }
+    }
+
+    @Override
+    public Optional<UUID> verifyMfaToken(String token) {
+        if (token == null || token.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            SignedJWT jwt = SignedJWT.parse(token);
+            for (RSAPublicKey key : keyManager.allPublicKeys()) {
+                if (!jwt.verify(new RSASSAVerifier(key))) {
+                    continue;
+                }
+                var claims = jwt.getJWTClaimsSet();
+                if (!"mfa".equals(claims.getStringClaim("purpose"))
+                        || !Objects.equals(claims.getIssuer(), props.jwt.issuer)
+                        || claims.getExpirationTime() == null
+                        || claims.getExpirationTime().before(new Date())) {
+                    return Optional.empty();
+                }
+                return Optional.of(UUID.fromString(claims.getSubject()));
+            }
+        } catch (Exception e) {
+            log.debug("Rejected MFA token: {}", e.getMessage());
+        }
+        return Optional.empty();
     }
 
     private String signAccessToken(User user) {

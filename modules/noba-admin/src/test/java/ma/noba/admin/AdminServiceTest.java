@@ -5,12 +5,15 @@ import ma.noba.admin.application.service.AdminService;
 import ma.noba.shared.application.dto.PagedResponse;
 import ma.noba.shared.domain.model.UserStatus;
 import ma.noba.shared.domain.port.AdminIdentityPort;
+import ma.noba.shared.domain.port.AdminInsightsPort;
 import ma.noba.shared.domain.port.AdminPaymentPort;
 import ma.noba.shared.domain.port.AdminProviderPort;
 import ma.noba.shared.domain.port.AdminQueuePort;
 import ma.noba.shared.domain.port.AdminRolePort;
 import ma.noba.shared.domain.port.AdminUserDirectoryPort;
 import ma.noba.shared.domain.port.AdminUserPort;
+import ma.noba.shared.domain.port.ProviderDocumentPort;
+import ma.noba.shared.domain.port.service.ApiKeyRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,13 +47,17 @@ class AdminServiceTest {
     @Mock AdminAuditService audit;
     @Mock AdminPaymentPort payments;
     @Mock AdminRolePort roles;
+    @Mock AdminInsightsPort insights;
+    @Mock ProviderDocumentPort providerDocuments;
+    @Mock ApiKeyRepository apiKeys;
 
     private AdminService service;
     private final UUID actor = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
-        service = new AdminService(identity, queues, users, providers, directory, audit, payments, roles);
+        service = new AdminService(identity, queues, users, providers, directory, audit, payments, roles,
+                insights, providerDocuments, apiKeys);
     }
 
     @Test

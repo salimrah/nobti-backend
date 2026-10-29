@@ -3,6 +3,8 @@ package ma.noba.provider.infra.adapter;
 import ma.noba.provider.application.service.ProviderApplicationService;
 import ma.noba.provider.domain.model.Provider;
 import ma.noba.provider.domain.model.ProviderService;
+import ma.noba.provider.domain.port.ProviderSearchIndexPort;
+import org.springframework.beans.factory.ObjectProvider;
 import ma.noba.provider.domain.model.ProviderStatus;
 import ma.noba.provider.domain.port.service.ProviderRepository;
 import ma.noba.shared.application.dto.PagedResponse;
@@ -24,11 +26,24 @@ public class AdminProviderPortAdapter implements AdminProviderPort {
 
     private final ProviderRepository providerRepository;
     private final ProviderApplicationService providerApplicationService;
+    private final ObjectProvider<ProviderSearchIndexPort> searchIndex;
 
     public AdminProviderPortAdapter(ProviderRepository providerRepository,
-                                    ProviderApplicationService providerApplicationService) {
+                                    ProviderApplicationService providerApplicationService,
+                                    ObjectProvider<ProviderSearchIndexPort> searchIndex) {
         this.providerRepository = providerRepository;
         this.providerApplicationService = providerApplicationService;
+        this.searchIndex = searchIndex;
+    }
+
+    @Override
+    public boolean reindexSearch() {
+        ProviderSearchIndexPort indexer = searchIndex.getIfAvailable();
+        if (indexer == null) {
+            return false;
+        }
+        indexer.reindexAll();
+        return true;
     }
 
     @Override

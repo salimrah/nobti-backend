@@ -5,6 +5,7 @@ import ma.noba.identity.application.dto.ActiveSessionView;
 import ma.noba.identity.domain.model.User;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -26,4 +27,10 @@ public interface TokenPort {
     void revokeAllUserTokens(UUID userId);
 
     boolean revokeSession(UUID tokenId, UUID userId);
+
+    /** Short-lived token proving the password step succeeded (TOTP still pending). */
+    String issueMfaToken(User user);
+
+    /** @return the user id when the token is a valid, unexpired MFA token. */
+    Optional<UUID> verifyMfaToken(String token);
 }

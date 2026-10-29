@@ -1,5 +1,6 @@
 package ma.noba.app.interfaces.rest;
 
+import ma.noba.app.admin.FeatureFlagStore;
 import ma.noba.config.FeatureFlags;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
@@ -8,6 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,13 +30,16 @@ public class AdminOpsController {
     private final ObjectProvider<Flyway> flywayProvider;
     private final ObjectProvider<JdbcTemplate> jdbcProvider;
     private final FeatureFlags featureFlags;
+    private final FeatureFlagStore featureFlagStore;
 
     public AdminOpsController(ObjectProvider<Flyway> flywayProvider,
                               ObjectProvider<JdbcTemplate> jdbcProvider,
-                              FeatureFlags featureFlags) {
+                              FeatureFlags featureFlags,
+                              FeatureFlagStore featureFlagStore) {
         this.flywayProvider = flywayProvider;
         this.jdbcProvider = jdbcProvider;
         this.featureFlags = featureFlags;
+        this.featureFlagStore = featureFlagStore;
     }
 
     @GetMapping("/info")
@@ -85,6 +91,13 @@ public class AdminOpsController {
 
     @GetMapping("/flags")
     public ResponseEntity<Map<String, Boolean>> flags() {
+        return ResponseEntity.ok(featureFlags.getFlags());
+    }
+
+    /** Enables/disables features at runtime; overrides are persisted and survive restarts. */
+    @PutMapping("/flags")
+    public ResponseEntity<Map<String, Boolean>> updateFlags(@RequestBody Map<String, Boolean> flags) {
+        featureFlagStore.saveAll(flags);
         return ResponseEntity.ok(featureFlags.getFlags());
     }
 }

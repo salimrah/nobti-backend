@@ -6,11 +6,13 @@ import ma.noba.admin.domain.model.AdminAuditEvent;
 import ma.noba.admin.domain.port.AdminAuditRepository;
 import ma.noba.shared.application.dto.PagedResponse;
 import ma.noba.shared.domain.port.AdminAuditPort;
+import ma.noba.shared.domain.port.AdminUserDirectoryPort;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -24,6 +26,7 @@ import java.util.UUID;
 public class AdminAuditService implements AdminAuditPort {
 
     private final AdminAuditRepository repository;
+    private final AdminUserDirectoryPort directory;
 
     @Override
     @Transactional
@@ -31,11 +34,23 @@ public class AdminAuditService implements AdminAuditPort {
                        UUID targetId, Map<String, Object> metadata) {
         repository.persist(AdminAuditEvent.of(
                 actorId,
-                actorLabel,
+                resolveLabel(actorId, actorLabel),
                 action.toUpperCase(Locale.ROOT),
                 targetType.toUpperCase(Locale.ROOT),
                 targetId,
                 metadata));
+    }
+
+    /** Tokens carry no contact details, so anonymous labels fall back to the profile name. */
+    private String resolveLabel(UUID actorId, String actorLabel) {
+        if (actorLabel != null && !actorLabel.isBlank()) {
+            return actorLabel;
+        }
+        try {
+            return directory.displayNames(List.of(actorId)).get(actorId);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     @Transactional(readOnly = true)

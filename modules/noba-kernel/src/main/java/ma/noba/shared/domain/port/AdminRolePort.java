@@ -12,6 +12,9 @@ public interface AdminRolePort {
 
     long countAdmins();
 
+    /** Every account holding the given role (any case). */
+    Set<UUID> userIdsWithRole(String role);
+
     /** Roles an administrator may assign. */
     Set<String> assignableRoles();
 }

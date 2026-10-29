@@ -27,4 +27,7 @@ public interface NotificationDeliveryRepository {
 
     record DeliveryWithType(NotificationDelivery delivery, String notificationType) {
     }
+
+    /** Delivery counters grouped by channel and status for notifications matching a dedupe prefix. */
+    List<Object[]> statsForDedupePrefix(String prefix);
 }

@@ -20,6 +20,10 @@ public class FeatureFlags {
         return flags.getOrDefault(feature, false);
     }
 
+    public synchronized void set(String feature, boolean enabled) {
+        flags.put(feature, enabled);
+    }
+
     public boolean isEnabled(String feature, boolean defaultValue) {
         return flags.getOrDefault(feature, defaultValue);
     }

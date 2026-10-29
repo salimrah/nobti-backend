@@ -39,6 +39,10 @@ public class Payout {
     @Column(name = "stripe_transfer_id", length = 100)
     private String stripeTransferId;
 
+    /** Charge the transfer was funded from, needed to retry a failed payout. */
+    @Column(name = "source_charge_id", length = 100)
+    private String sourceChargeId;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -64,5 +68,9 @@ public class Payout {
 
     public void markFailed() {
         this.status = PayoutStatus.FAILED;
+    }
+
+    public void markPending() {
+        this.status = PayoutStatus.PENDING;
     }
 }
