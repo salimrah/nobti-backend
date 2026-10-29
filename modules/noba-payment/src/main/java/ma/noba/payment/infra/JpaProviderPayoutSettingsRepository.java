@@ -10,4 +10,6 @@ import java.util.UUID;
 public interface JpaProviderPayoutSettingsRepository extends JpaRepository<ProviderPayoutSettings, UUID>, ProviderPayoutSettingsRepository {
 
     Optional<ProviderPayoutSettings> findByProviderId(UUID providerId);
+
+    Optional<ProviderPayoutSettings> findByStripeAccountId(String stripeAccountId);
 }

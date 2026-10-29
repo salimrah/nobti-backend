@@ -107,10 +107,11 @@ public class TotpService {
     }
 
     public String otpauthUri(String accountLabel, String secret) {
-        String label = (issuer + ":" + (accountLabel == null ? "account" : accountLabel)).trim();
+        String issuerName = issuer == null || issuer.isBlank() ? "Noba" : issuer;
+        String label = (issuerName + ":" + (accountLabel == null ? "account" : accountLabel)).trim();
         return "otpauth://totp/" + urlEncode(label)
                 + "?secret=" + secret
-                + "&issuer=" + urlEncode(issuer)
+                + "&issuer=" + urlEncode(issuerName)
                 + "&algorithm=SHA1&digits=" + DIGITS + "&period=" + STEP_SECONDS;
     }
 

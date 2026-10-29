@@ -8,11 +8,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface JpaPayoutRepository extends JpaRepository<Payout, UUID>, PayoutRepository {
 
     Page<Payout> findByProviderId(UUID providerId, Pageable pageable);
+
+    Optional<Payout> findByStripeTransferId(String stripeTransferId);
 
     List<Payout> findByProviderIdAndStatus(UUID providerId, PayoutStatus status);
 }

@@ -104,6 +104,11 @@ public class PaymentApplicationService {
             Payout payout = new Payout(transaction.getProviderId(), netAmount, transaction.getCurrency());
             payout.setSourceChargeId(transaction.getStripeChargeId());
             payout.markProcessing(transferId);
+            // A transfer created from a charge moves the funds immediately; bank settlement is a
+            // separate Stripe payout on the connected account, which is not our payout record.
+            if (transferId != null) {
+                payout.markPaid();
+            }
             payoutRepository.save(payout);
         }
     }
@@ -254,6 +259,51 @@ public class PaymentApplicationService {
         String transferId = paymentGateway.transferToProvider(
             payout.getSourceChargeId(), settings.getStripeAccountId(), payout.getAmount(), payout.getCurrency());
         payout.markProcessing(transferId);
+        if (transferId != null) {
+            payout.markPaid();
+        }
         payoutRepository.save(payout);
+    }
+
+    /**
+     * Applies a Stripe transfer event to the matching payout. A reversed transfer means the money
+     * was clawed back (failed payout), otherwise the payout is settled.
+     *
+     * @return true when a payout was found and updated
+     */
+    @Transactional
+    public boolean handleTransferEvent(String transferId, boolean reversed) {
+        if (transferId == null) {
+            return false;
+        }
+        Payout payout = payoutRepository.findByStripeTransferId(transferId).orElse(null);
+        if (payout == null) {
+            log.warn("No payout recorded for Stripe transfer {}", transferId);
+            return false;
+        }
+        if (reversed) {
+            payout.markFailed();
+        } else if (payout.getStatus() != PayoutStatus.PAID) {
+            payout.markPaid();
+        }
+        payoutRepository.save(payout);
+        return true;
+    }
+
+    /** Keeps the payout-enabled flag in sync with Stripe Connect account updates. */
+    @Transactional
+    public boolean handleAccountUpdated(String stripeAccountId, boolean payoutsEnabled) {
+        if (stripeAccountId == null) {
+            return false;
+        }
+        ProviderPayoutSettings settings = payoutSettingsRepository
+                .findByStripeAccountId(stripeAccountId).orElse(null);
+        if (settings == null) {
+            log.debug("Ignoring Stripe account.updated for unknown account {}", stripeAccountId);
+            return false;
+        }
+        settings.updateStripeAccount(stripeAccountId, payoutsEnabled);
+        payoutSettingsRepository.save(settings);
+        return true;
     }
 }

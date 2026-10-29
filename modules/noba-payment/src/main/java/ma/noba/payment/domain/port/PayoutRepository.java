@@ -12,6 +12,8 @@ import java.util.UUID;
 public interface PayoutRepository {
     Payout save(Payout payout);
     Optional<Payout> findById(UUID id);
+
+    Optional<Payout> findByStripeTransferId(String stripeTransferId);
     Page<Payout> findByProviderId(UUID providerId, Pageable pageable);
 
     Page<Payout> findAllByOrderByCreatedAtDesc(Pageable pageable);

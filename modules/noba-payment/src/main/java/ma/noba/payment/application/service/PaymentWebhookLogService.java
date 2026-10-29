@@ -3,9 +3,11 @@ package ma.noba.payment.application.service;
 import lombok.RequiredArgsConstructor;
 import ma.noba.payment.domain.model.PaymentWebhookEvent;
 import ma.noba.payment.domain.port.PaymentWebhookEventRepository;
+import ma.noba.payment.domain.port.PaymentWebhookReplayPort;
 import ma.noba.shared.application.dto.PagedResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -28,7 +30,7 @@ public class PaymentWebhookLogService {
     private static final Logger log = LoggerFactory.getLogger(PaymentWebhookLogService.class);
 
     private final PaymentWebhookEventRepository webhooks;
-    private final PaymentApplicationService payments;
+    private final ObjectProvider<PaymentWebhookReplayPort> replayer;
 
     @Transactional
     public PaymentWebhookEvent record(String provider, String eventId, String eventType,
@@ -66,46 +68,44 @@ public class PaymentWebhookLogService {
         return webhooks.save(event);
     }
 
+    /**
+     * Applies a stored event through the provider handler. Used both for live deliveries and for
+     * manual replays; the outcome is recorded on the event row.
+     */
     @Transactional
-    public void markProcessed(UUID id) {
-        webhooks.findById(id).ifPresent(event -> {
+    public PaymentWebhookEvent process(UUID id) {
+        PaymentWebhookEvent event = webhooks.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Webhook event not found"));
+        PaymentWebhookReplayPort handler = replayer.getIfAvailable();
+        if (handler == null) {
+            event.markFailed("No webhook handler is configured");
+            return webhooks.save(event);
+        }
+        try {
+            handler.replay(event);
             event.markProcessed();
-            webhooks.save(event);
-        });
-    }
-
-    @Transactional
-    public void markFailed(UUID id, String error) {
-        webhooks.findById(id).ifPresent(event -> {
-            event.markFailed(error);
-            webhooks.save(event);
-        });
+            log.info("Processed webhook {} ({})", event.getId(), event.getEventType());
+        } catch (Exception e) {
+            event.markFailed(e.getMessage());
+            log.warn("Webhook {} failed: {}", event.getId(), e.getMessage());
+        }
+        return webhooks.save(event);
     }
 
     @Transactional
     public PaymentWebhookEvent replay(UUID id) {
         PaymentWebhookEvent event = webhooks.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Webhook event not found"));
-        if (event.getPaymentIntentId() == null || event.getEventType() == null) {
-            throw new IllegalArgumentException("This event carries no payment to replay");
+        if (event.getEventType() == null || event.getPayload() == null) {
+            throw new IllegalArgumentException("This event carries no replayable payload");
+        }
+        PaymentWebhookReplayPort handler = replayer.getIfAvailable();
+        if (handler == null) {
+            throw new IllegalStateException("No webhook replay handler is configured");
         }
         event.setReplayCount(event.getReplayCount() + 1);
-        try {
-            switch (event.getEventType()) {
-                case "payment_intent.succeeded" ->
-                        payments.handlePaymentSuccess(event.getPaymentIntentId(), event.getChargeId());
-                case "payment_intent.payment_failed" ->
-                        payments.handlePaymentFailure(event.getPaymentIntentId(), event.getFailureMessage());
-                default -> throw new IllegalArgumentException(
-                        "Event type " + event.getEventType() + " has no replay handler");
-            }
-            event.markProcessed();
-            log.info("Replayed webhook {} ({})", event.getId(), event.getEventType());
-        } catch (Exception e) {
-            event.markFailed(e.getMessage());
-            log.warn("Webhook replay failed for {}: {}", event.getId(), e.getMessage());
-        }
-        return webhooks.save(event);
+        webhooks.save(event);
+        return process(event.getId());
     }
 
     @Transactional(readOnly = true)

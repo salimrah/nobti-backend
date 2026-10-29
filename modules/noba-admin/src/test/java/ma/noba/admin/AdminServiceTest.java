@@ -1,5 +1,7 @@
 package ma.noba.admin;
 
+import ma.noba.admin.application.dto.BulkUserActionRequest;
+import ma.noba.admin.application.dto.CreateAdminRequest;
 import ma.noba.admin.application.service.AdminAuditService;
 import ma.noba.admin.application.service.AdminService;
 import ma.noba.shared.application.dto.PagedResponse;
@@ -29,10 +31,12 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,6 +62,60 @@ class AdminServiceTest {
     void setUp() {
         service = new AdminService(identity, queues, users, providers, directory, audit, payments, roles,
                 insights, providerDocuments, apiKeys);
+    }
+
+    @Test
+    @DisplayName("Creating an administrator provisions the account and adds the ADMIN role")
+    void createAdmin() {
+        UUID newId = UUID.randomUUID();
+        when(identity.createAdmin("new@noba.ma", "Passw0rd!123", "New", "Admin")).thenReturn(newId);
+        when(roles.rolesOf(newId)).thenReturn(Set.of("USER"));
+        when(identity.findUser(newId)).thenReturn(Optional.of(new AdminIdentityPort.UserState(
+                newId, "ACTIVE", "new@noba.ma", null, Instant.now())));
+
+        var view = service.createAdmin(actor, "ops@noba.ma",
+                new CreateAdminRequest("new@noba.ma", "Passw0rd!123", "New", "Admin"));
+
+        assertThat(view.email()).isEqualTo("new@noba.ma");
+        verify(roles).replaceRoles(eq(newId), eq(Set.of("USER", "ADMIN")));
+        verify(audit).record(eq(actor), eq("ops@noba.ma"), eq("ADMIN_CREATED"), eq("USER"), eq(newId), any());
+    }
+
+    @Test
+    @DisplayName("Revoking administrator access blocks self, non-admins and the last admin")
+    void revokeAdminGuards() {
+        UUID target = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.revokeAdmin(actor, "ops", actor))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("own");
+
+        when(roles.rolesOf(target)).thenReturn(Set.of("USER"));
+        assertThatThrownBy(() -> service.revokeAdmin(actor, "ops", target))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not an administrator");
+
+        when(roles.rolesOf(target)).thenReturn(Set.of("USER", "ADMIN"));
+        when(roles.countAdmins()).thenReturn(1L);
+        assertThatThrownBy(() -> service.revokeAdmin(actor, "ops", target))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("last administrator");
+
+        when(roles.countAdmins()).thenReturn(2L);
+        service.revokeAdmin(actor, "ops", target);
+        verify(roles).replaceRoles(eq(target), eq(Set.of("USER")));
+        verify(identity).revokeSessions(target);
+    }
+
+    @Test
+    @DisplayName("Bulk actions skip the acting administrator")
+    void bulkSkipsSelf() {
+        var results = service.bulkUserAction(actor, "ops",
+                new BulkUserActionRequest(List.of(actor), "SUSPEND", "cleanup"));
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).success()).isFalse();
+        verify(identity, never()).suspendUser(any());
     }
 
     @Test

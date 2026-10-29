@@ -5,6 +5,7 @@ import ma.noba.payment.application.service.PaymentApplicationService;
 import ma.noba.payment.domain.model.PaymentStatus;
 import ma.noba.payment.domain.model.PaymentTransaction;
 import ma.noba.payment.domain.model.Payout;
+import ma.noba.payment.domain.model.PayoutStatus;
 import ma.noba.payment.domain.model.ProviderPayoutSettings;
 import ma.noba.payment.domain.port.PaymentTransactionRepository;
 import ma.noba.payment.domain.port.PayoutRepository;
@@ -192,6 +193,79 @@ class PaymentApplicationServiceTest {
 
         assertThatThrownBy(() -> service.processRefund(id)).isInstanceOf(IllegalStateException.class);
         verify(paymentGateway).processRefund("pi_1", new BigDecimal("100.00"));
+    }
+
+    @Test
+    @DisplayName("A partial refund records the balance, reason and proportional transfer reversal")
+    void partialRefund() {
+        PaymentTransaction tx = pendingTransaction();
+        tx.markSucceeded("pi_1", "ch_1", new BigDecimal("5.00"));
+        tx.markTransferred("tr_1");
+        UUID id = UUID.randomUUID();
+        when(transactionRepository.findByIdForUpdate(id)).thenReturn(Optional.of(tx));
+        when(transactionRepository.save(any())).thenReturn(tx);
+
+        service.processRefund(id, new BigDecimal("40.00"), "damaged item");
+
+        assertThat(tx.getStatus()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
+        assertThat(tx.getRefundedAmount()).isEqualByComparingTo("40.00");
+        assertThat(tx.getRefundReason()).isEqualTo("damaged item");
+        assertThat(tx.refundable()).isEqualByComparingTo("60.00");
+        verify(paymentGateway).processRefund("pi_1", new BigDecimal("40.00"));
+        // 40 - (5 fee * 40/100) = 38 returned from the provider's share
+        verify(paymentGateway).reverseProviderTransfer("tr_1", new BigDecimal("38.00"));
+    }
+
+    @Test
+    @DisplayName("A refund cannot exceed the refundable balance")
+    void refundAboveBalanceIsRejected() {
+        PaymentTransaction tx = pendingTransaction();
+        tx.markSucceeded("pi_1", "ch_1", new BigDecimal("5.00"));
+        UUID id = UUID.randomUUID();
+        when(transactionRepository.findByIdForUpdate(id)).thenReturn(Optional.of(tx));
+
+        assertThatThrownBy(() -> service.processRefund(id, new BigDecimal("120.00"), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("exceeds");
+
+        verify(paymentGateway, never()).processRefund(anyString(), any());
+    }
+
+    @Test
+    @DisplayName("Transfer events settle or fail the matching payout")
+    void transferEventsUpdatePayouts() {
+        UUID providerId = UUID.randomUUID();
+        Payout paid = new Payout(providerId, new BigDecimal("95.00"), "MAD");
+        paid.markProcessing("tr_9");
+        when(payoutRepository.findByStripeTransferId("tr_9")).thenReturn(Optional.of(paid));
+        when(payoutRepository.save(any())).thenReturn(paid);
+
+        assertThat(service.handleTransferEvent("tr_9", false)).isTrue();
+        assertThat(paid.getStatus()).isEqualTo(PayoutStatus.PAID);
+        assertThat(paid.getPaidAt()).isNotNull();
+
+        Payout failed = new Payout(providerId, new BigDecimal("20.00"), "MAD");
+        failed.markProcessing("tr_10");
+        when(payoutRepository.findByStripeTransferId("tr_10")).thenReturn(Optional.of(failed));
+        when(payoutRepository.save(any())).thenReturn(failed);
+
+        assertThat(service.handleTransferEvent("tr_10", true)).isTrue();
+        assertThat(failed.getStatus()).isEqualTo(PayoutStatus.FAILED);
+        assertThat(service.handleTransferEvent("tr_missing", false)).isFalse();
+    }
+
+    @Test
+    @DisplayName("Connected account updates keep the payout flag in sync")
+    void accountUpdatedSyncsPayoutsEnabled() {
+        UUID providerId = UUID.randomUUID();
+        ProviderPayoutSettings settings = new ProviderPayoutSettings(providerId);
+        settings.updateStripeAccount("acct_1", false);
+        when(payoutSettingsRepository.findByStripeAccountId("acct_1")).thenReturn(Optional.of(settings));
+        when(payoutSettingsRepository.save(any())).thenReturn(settings);
+
+        assertThat(service.handleAccountUpdated("acct_1", true)).isTrue();
+        assertThat(settings.isPayoutsEnabled()).isTrue();
+        assertThat(service.handleAccountUpdated("acct_unknown", true)).isFalse();
     }
 
     @Test

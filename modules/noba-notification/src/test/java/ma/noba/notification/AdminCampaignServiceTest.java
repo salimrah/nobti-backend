@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -77,6 +79,30 @@ class AdminCampaignServiceTest {
         verify(notifications, times(2)).send(any());
         verify(audit).record(eq(actor), eq("ops@noba.ma"), eq("BROADCAST_SENT"), eq("CAMPAIGN"),
                 any(), any());
+    }
+
+    @Test
+    @DisplayName("A future send time stores a scheduled campaign without notifying anyone")
+    void schedulesInsteadOfSending() {
+        when(audience.count(AdminAudiencePort.Audience.ALL)).thenReturn(5L);
+
+        var result = service.send(actor, "ops", "Later", "Body", "ALL", Instant.now().plusSeconds(3600));
+
+        assertThat(result.status()).isEqualTo("SCHEDULED");
+        verify(notifications, never()).send(any());
+        verify(audit).record(eq(actor), any(), eq("BROADCAST_SCHEDULED"), eq("CAMPAIGN"), any(), any());
+    }
+
+    @Test
+    @DisplayName("Only pending campaigns can be cancelled")
+    void cancelRejectsCompletedCampaigns() {
+        NotificationCampaign sent = NotificationCampaign.create("T", "B", "ALL", 1, actor);
+        sent.complete(1, 0);
+        when(campaigns.findById(sent.getId())).thenReturn(java.util.Optional.of(sent));
+
+        assertThatThrownBy(() -> service.cancel(actor, "ops", sent.getId()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("pending");
     }
 
     @Test

@@ -8,4 +8,6 @@ import java.util.UUID;
 public interface ProviderPayoutSettingsRepository {
     ProviderPayoutSettings save(ProviderPayoutSettings settings);
     Optional<ProviderPayoutSettings> findByProviderId(UUID providerId);
+
+    Optional<ProviderPayoutSettings> findByStripeAccountId(String stripeAccountId);
 }
